@@ -63,7 +63,7 @@ func NewPostgresCommand(t *testing.T) (*postgresCommand, error) {
 
 	cmd := exec.Command("docker", "run",
 		"--rm", "--name", fmt.Sprintf("postgres-test-%d", port), "-p", fmt.Sprintf("%d:5432", port),
-		"p")
+		"flachnetz/pgtest:10.1-1")
 
 	cmd.Stderr = loggerToWriter("[postgres-out]", t.Log)
 	cmd.Stdout = loggerToWriter("[postgres-err]", t.Log)
