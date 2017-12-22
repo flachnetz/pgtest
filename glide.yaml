@@ -1,0 +1,4 @@
+package: github.com/flachnetz/pgtest
+import:
+- package: github.com/jmoiron/sqlx
+- package: github.com/lib/pq
