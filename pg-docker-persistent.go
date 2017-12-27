@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/pkg/errors"
-	"math/rand"
 	"os/exec"
 	"sync"
 	"syscall"
@@ -74,21 +73,15 @@ type persistentDockerInstance struct {
 func (cmd *persistentDockerInstance) MustConnect() *sql.DB {
 	db := cmd.baseInstance.MustConnect()
 
-	schema := fmt.Sprintf("s%d", rand.Int63())
+	if _, err := db.Exec("DROP SCHEMA IF EXISTS public CASCADE"); err != nil {
+		db.Close()
+		panic(errors.WithMessage(err, "drop schema"))
+	}
 
-	tx, _ := db.Begin()
-
-	if _, err := db.Exec("CREATE SCHEMA " + schema); err != nil {
+	if _, err := db.Exec("CREATE SCHEMA public"); err != nil {
 		db.Close()
 		panic(errors.WithMessage(err, "create schema"))
 	}
-
-	if _, err := db.Exec("SET search_path TO " + schema); err != nil {
-		db.Close()
-		panic(errors.WithMessage(err, "set search path to schema"))
-	}
-
-	tx.Commit()
 
 	return db
 }
