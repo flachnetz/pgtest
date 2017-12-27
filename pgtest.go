@@ -25,7 +25,6 @@ type Instance interface {
 }
 
 type Provider interface {
-	Prepare() error
 	Start(t *testing.T) (Instance, error)
 }
 
@@ -56,22 +55,10 @@ func (cmd *baseInstance) MustConnect() *sql.DB {
 	panic(errors.New("could not connect to postgres"))
 }
 
-var InstanceProvider Provider
-
-func init() {
-	if runtime.GOOS == "linux" {
-		InstanceProvider = &pgLinuxProvider{}
-	} else {
-		InstanceProvider = &pgDockerProvider{}
-	}
-}
+// use the persistent docker provider for now.
+var InstanceProvider Provider = &pgPersistentDockerProvider{}
 
 func WithDatabase(t *testing.T, setup SetupFunc, fn TestFunc) {
-	if err := InstanceProvider.Prepare(); err != nil {
-		t.Fatal("Could not prepare postgres provider: ", err)
-		return
-	}
-
 	pg, err := InstanceProvider.Start(t)
 	if err != nil {
 		t.Fatal("Error starting local postgres instance: ", err)

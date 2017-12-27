@@ -12,10 +12,6 @@ type pgDockerProvider struct {
 	prep sync.Once
 }
 
-func (p *pgDockerProvider) Prepare() (err error) {
-	return nil
-}
-
 func (pgDockerProvider) Start(t *testing.T) (Instance, error) {
 	port := rng.Intn(10000) + 20000
 

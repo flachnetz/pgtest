@@ -14,10 +14,6 @@ type pgLinuxProvider struct {
 	prep sync.Once
 }
 
-func (p *pgLinuxProvider) Prepare() (err error) {
-	return nil
-}
-
 func (pgLinuxProvider) Start(t *testing.T) (Instance, error) {
 	port := rng.Intn(10000) + 20000
 
