@@ -76,6 +76,8 @@ func (cmd *persistentDockerInstance) MustConnect() *sql.DB {
 
 	schema := fmt.Sprintf("s%d", rand.Int63())
 
+	tx, _ := db.Begin()
+
 	if _, err := db.Exec("CREATE SCHEMA " + schema); err != nil {
 		db.Close()
 		panic(errors.WithMessage(err, "create schema"))
@@ -85,6 +87,8 @@ func (cmd *persistentDockerInstance) MustConnect() *sql.DB {
 		db.Close()
 		panic(errors.WithMessage(err, "set search path to schema"))
 	}
+
+	tx.Commit()
 
 	return db
 }

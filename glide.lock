@@ -1,8 +1,8 @@
-hash: 998acf7a8f0a52230acce34f3f23df15c0fd8b89baba2277e289941f7fe8d0cb
-updated: 2017-12-24T11:51:32.088044604+01:00
+hash: 31d4c508c311431462757fa4791b763736b6ae0c0fd5cb0a1becdb48019c7849
+updated: 2017-12-27T15:32:57.450263251Z
 imports:
 - name: github.com/lib/pq
-  version: 83612a56d3dd153a94a629cd64925371c9adad78
+  version: 8c6ee72f3e6bcb1542298dd5f76cb74af9742cec
   subpackages:
   - oid
 - name: github.com/pkg/errors
