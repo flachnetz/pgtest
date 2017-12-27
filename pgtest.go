@@ -15,6 +15,9 @@ import (
 	"runtime"
 )
 
+// newly seeded random
+var random = rand.New(rand.NewSource(time.Now().UnixNano()))
+
 type SetupFunc func(db *sqlx.DB) error
 
 type TestFunc func(db *sqlx.DB)
@@ -57,7 +60,7 @@ type postgresCommand struct {
 // ENTRYPOINT ["/usr/local/bin/postgres", "-D", "/pg"]
 
 func NewPostgresCommand(t *testing.T) (*postgresCommand, error) {
-	port := rand.Intn(10000) + 20000
+	port := random.Intn(10000) + 20000
 
 	closeSignal := make(chan bool)
 
