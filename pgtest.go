@@ -35,9 +35,12 @@ type baseInstance struct {
 
 func (cmd *baseInstance) MustConnect() *sql.DB {
 	for idx := 0; idx < 100; idx++ {
-		time.Sleep(100 * time.Millisecond)
+		if idx > 0 {
+			time.Sleep(100 * time.Millisecond)
+		}
 
 		cmd.t.Log("Trying to connect to postgres database")
+
 		db, err := sql.Open("postgres", cmd.uri)
 		if err != nil {
 			cmd.t.Log("Could not open connection to database, trying again: ", err)
@@ -45,6 +48,8 @@ func (cmd *baseInstance) MustConnect() *sql.DB {
 		}
 
 		if err := db.Ping(); err != nil {
+			db.Close()
+
 			cmd.t.Log("Could not ping database, trying again: ", err)
 			continue
 		}
