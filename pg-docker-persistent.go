@@ -1,4 +1,7 @@
+// +build linux,!darwin
+
 package pgtest
+
 
 import (
 	"database/sql"
@@ -10,7 +13,7 @@ import (
 	"testing"
 )
 
-type pgPersistentDockerProvider struct {
+type pgDockerProvider struct {
 	prep sync.Once
 	port int
 	name string
@@ -18,7 +21,7 @@ type pgPersistentDockerProvider struct {
 	t *testing.T
 }
 
-func (p *pgPersistentDockerProvider) log(args ...interface{}) {
+func (p *pgDockerProvider) log(args ...interface{}) {
 	t := p.t
 
 	if t != nil {
@@ -26,7 +29,7 @@ func (p *pgPersistentDockerProvider) log(args ...interface{}) {
 	}
 }
 
-func (p *pgPersistentDockerProvider) Start(t *testing.T) (Instance, error) {
+func (p *pgDockerProvider) Start(t *testing.T) (Instance, error) {
 	p.t = t
 
 	var err error

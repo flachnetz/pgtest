@@ -1,4 +1,7 @@
+// +build darwin,!linux
+
 package pgtest
+
 
 import (
 	"fmt"

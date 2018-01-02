@@ -19,32 +19,3 @@ func TestWithDatabase_Docker(t *testing.T) {
 	}
 }
 
-func TestWithDatabase_PersistentDocker(t *testing.T) {
-	InstanceProvider = &pgPersistentDockerProvider{}
-
-	for idx := 0; idx < 10; idx++ {
-		var result bool
-		WithDatabase(t, NoSetup, func(db *sql.DB) {
-			row := db.QueryRow("SELECT TRUE")
-			row.Scan(&result)
-		})
-
-		if !result {
-			t.Fatal("sql statement was not executed successful")
-		}
-	}
-}
-
-func TestWithDatabase_Linux(t *testing.T) {
-	InstanceProvider = &pgLinuxProvider{}
-
-	var result bool
-	WithDatabase(t, NoSetup, func(db *sql.DB) {
-		row := db.QueryRow("SELECT TRUE")
-		row.Scan(&result)
-	})
-
-	if !result {
-		t.Fatal("sql statement was not executed successful")
-	}
-}

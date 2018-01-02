@@ -61,7 +61,7 @@ func (cmd *baseInstance) MustConnect() *sql.DB {
 }
 
 // use the persistent docker provider for now.
-var InstanceProvider Provider = &pgPersistentDockerProvider{}
+var InstanceProvider Provider = &pgDockerProvider{}
 
 func WithDatabase(t *testing.T, setup SetupFunc, fn TestFunc) {
 	pg, err := InstanceProvider.Start(t)
