@@ -1,17 +1,15 @@
 package pgtest
 
 import (
-	"errors"
+	"database/sql"
+	"math/rand"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
-
-	"bufio"
-	"database/sql"
-	_ "github.com/lib/pq"
-	"io"
-	"math/rand"
-	"runtime"
 )
+
+var Root = os.ExpandEnv("${HOME}/.pgtest")
 
 var random = rand.New(rand.NewSource(time.Now().UnixNano()))
 
@@ -19,99 +17,44 @@ type SetupFunc func(db *sql.DB) error
 
 type TestFunc func(db *sql.DB)
 
-type Instance interface {
-	io.Closer
-	MustConnect() *sql.DB
-}
-
-type Provider interface {
-	Start(t *testing.T) (Instance, error)
-}
-
-type baseInstance struct {
-	uri string
-	t   *testing.T
-}
-
-func (cmd *baseInstance) MustConnect() *sql.DB {
-	for idx := 0; idx < 100; idx++ {
-		if idx > 0 {
-			time.Sleep(100 * time.Millisecond)
+func WithDatabase(t *testing.T, setup SetupFunc, test TestFunc) {
+	withCurrentT(t, func() {
+		if err := preparePostgresInstallation(Root, true); err != nil {
+			t.Fatalf("Could not prepare postgres installation: %s", err)
+			return
 		}
 
-		cmd.t.Log("Trying to connect to postgres database")
+		config := postgresConfig{
+			Binary:   filepath.Join(Root, "unpacked/pgsql/bin/postgres"),
+			Snapshot: filepath.Join(Root, "initdb/pgdata"),
+			Port:     random.Intn(20000) + 10000,
+		}
 
-		db, err := sql.Open("postgres", cmd.uri)
+		pg, err := startPostgresInstance(config)
 		if err != nil {
-			cmd.t.Log("Could not open connection to database, trying again: ", err)
-			continue
+			t.Fatalf("Could not start postgres instance on port %d: %s", config.Port, err)
+			return
 		}
 
-		if err := db.Ping(); err != nil {
-			db.Close()
+		defer pg.Close()
 
-			cmd.t.Log("Could not ping database, trying again: ", err)
-			continue
+		db, err := connect(pg.URL)
+		if err != nil {
+			t.Fatalf("Could not open a database connection to postgres at %s: %s", pg.URL, err)
+			return
 		}
 
-		return db
-	}
+		defer db.Close()
 
-	panic(errors.New("could not connect to postgres"))
-}
+		if err := setup(db); err != nil {
+			t.Fatalf("Database setup failed: %s", err)
+			return
+		}
 
-// use the persistent docker provider for now.
-var InstanceProvider Provider = &pgDockerProvider{}
-
-func WithDatabase(t *testing.T, setup SetupFunc, fn TestFunc) {
-	pg, err := InstanceProvider.Start(t)
-	if err != nil {
-		t.Fatal("Error starting local postgres instance: ", err)
-		return
-	}
-
-	defer pg.Close()
-
-	db := pg.MustConnect()
-	defer db.Close()
-
-	if err := setup(db); err != nil {
-		t.Fatal("Setup database failed: ", err)
-		return
-	}
-
-	fn(db)
+		test(db)
+	})
 }
 
 func NoSetup(*sql.DB) error {
 	return nil
-}
-
-func loggerToWriter(prefix string, printFunc func(args ...interface{})) io.Writer {
-	reader, writer := io.Pipe()
-
-	go writerScanner(reader, prefix, printFunc)
-	runtime.SetFinalizer(writer, writerFinalizer)
-
-	return writer
-}
-
-func writerScanner(reader *io.PipeReader, prefix string, printFunc func(args ...interface{})) {
-	scanner := bufio.NewScanner(reader)
-
-	for scanner.Scan() {
-		if scanner.Text() != "" {
-			printFunc(prefix, " ", scanner.Text())
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		printFunc("Error while reading from Writer: %s", err)
-	}
-
-	reader.Close()
-}
-
-func writerFinalizer(writer *io.PipeWriter) {
-	writer.Close()
 }

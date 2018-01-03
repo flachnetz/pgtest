@@ -1,5 +1,0 @@
-package: github.com/flachnetz/pgtest
-import:
-- package: github.com/lib/pq
-- package: github.com/pkg/errors
-  version: v0.8.0
