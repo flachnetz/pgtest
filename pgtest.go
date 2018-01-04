@@ -5,10 +5,10 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
-	"runtime"
 )
 
 var Root = os.ExpandEnv("${HOME}/.pgtest")
@@ -24,7 +24,7 @@ type TestFunc func(db *sql.DB)
 
 func WithDatabase(t *testing.T, setup SetupFunc, test TestFunc) {
 	withCurrentT(t, func() {
-		if err := preparePostgresInstallation(Root, isLinuxSystem); err != nil {
+		if err := PreparePostgresInstallation(Root, isLinuxSystem); err != nil {
 			t.Fatalf("Could not prepare postgres installation: %s", err)
 			return
 		}

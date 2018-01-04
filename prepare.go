@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-func preparePostgresInstallation(root string, linux bool) error {
+func PreparePostgresInstallation(root string, linux bool) error {
 	if err := os.MkdirAll(root, 0755); err != nil {
 		return errors.WithMessage(err, "creating working directory")
 	}
