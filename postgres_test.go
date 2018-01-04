@@ -13,3 +13,11 @@ func Test_WithDatabase(t *testing.T) {
 		}
 	})
 }
+
+func Benchmark_PostgresStartup(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		WithDatabase(nil, NoSetup, func(db *sql.DB) {
+			// do nothing
+		})
+	}
+}

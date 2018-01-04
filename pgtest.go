@@ -5,12 +5,14 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
 
 var Root = os.ExpandEnv("${HOME}/.pgtest")
 
+var randomLock sync.Mutex
 var random = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 type SetupFunc func(db *sql.DB) error
@@ -24,10 +26,14 @@ func WithDatabase(t *testing.T, setup SetupFunc, test TestFunc) {
 			return
 		}
 
+		randomLock.Lock()
+		port := random.Intn(20000) + 10000
+		randomLock.Unlock()
+
 		config := postgresConfig{
 			Binary:   filepath.Join(Root, "unpacked/pgsql/bin/postgres"),
 			Snapshot: filepath.Join(Root, "initdb/pgdata"),
-			Port:     random.Intn(20000) + 10000,
+			Port:     port,
 		}
 
 		pg, err := startPostgresInstance(config)

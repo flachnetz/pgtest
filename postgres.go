@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"syscall"
 )
 
 type postgresInstance struct {
@@ -47,6 +48,7 @@ func startPostgresInstance(config postgresConfig) (*postgresInstance, error) {
 	}
 
 	instance.cmd.Stderr = logWriter("postgres")
+	modifyProcessOnSystem(instance.cmd)
 
 	debugf("Starting new postgres instance on port %d", config.Port)
 	if err := instance.cmd.Start(); err != nil {
@@ -61,7 +63,12 @@ func (instance *postgresInstance) Close() error {
 	debugf("Stopping postgres instance on port %d", instance.Port)
 
 	if instance.cmd.Process != nil {
-		instance.cmd.Process.Kill()
+		pgid, err := syscall.Getpgid(instance.cmd.Process.Pid)
+		if err == nil {
+			syscall.Kill(-pgid, syscall.SIGKILL)
+		}
+
+		instance.cmd.Wait()
 	}
 
 	err := os.RemoveAll(instance.Data)
