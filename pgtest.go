@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"runtime"
 )
 
 var Root = os.ExpandEnv("${HOME}/.pgtest")
@@ -15,13 +16,15 @@ var Root = os.ExpandEnv("${HOME}/.pgtest")
 var randomLock sync.Mutex
 var random = rand.New(rand.NewSource(time.Now().UnixNano()))
 
+var isLinuxSystem = runtime.GOOS == "linux"
+
 type SetupFunc func(db *sql.DB) error
 
 type TestFunc func(db *sql.DB)
 
 func WithDatabase(t *testing.T, setup SetupFunc, test TestFunc) {
 	withCurrentT(t, func() {
-		if err := preparePostgresInstallation(Root, true); err != nil {
+		if err := preparePostgresInstallation(Root, isLinuxSystem); err != nil {
 			t.Fatalf("Could not prepare postgres installation: %s", err)
 			return
 		}
