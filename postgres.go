@@ -44,6 +44,7 @@ func startPostgresInstance(config postgresConfig) (*postgresInstance, error) {
 			"-D", pgdata+"/pgdata",
 			"-p", strconv.Itoa(config.Port),
 			"-c", "listen_addresses=",
+			"-c", "autovacuum=off",
 			"-c", "unix_socket_directories="+pgdata),
 	}
 
