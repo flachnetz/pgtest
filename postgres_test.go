@@ -15,9 +15,11 @@ func Test_WithDatabase(t *testing.T) {
 }
 
 func Benchmark_PostgresStartup(b *testing.B) {
+	WithDatabase(nil, NoSetup, func(db *sql.DB) {})
+
+	b.ResetTimer()
+
 	for i := 0; i < b.N; i++ {
-		WithDatabase(nil, NoSetup, func(db *sql.DB) {
-			// do nothing
-		})
+		WithDatabase(nil, NoSetup, func(db *sql.DB) {})
 	}
 }
