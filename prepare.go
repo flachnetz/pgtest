@@ -13,7 +13,9 @@ import (
 	"time"
 )
 
-func PreparePostgresInstallation(root string, linux bool) error {
+func PreparePostgresInstallation(path string, version string, linux bool) error {
+	root := filepath.Join(path, version)
+
 	if err := os.MkdirAll(root, 0755); err != nil {
 		return errors.WithMessage(err, "creating working directory")
 	}
@@ -21,7 +23,7 @@ func PreparePostgresInstallation(root string, linux bool) error {
 	if linux {
 		if err := download(
 			filepath.Join(root, "download"),
-			"https://get.enterprisedb.com/postgresql/postgresql-10.1-3-linux-x64-binaries.tar.gz",
+			"https://get.enterprisedb.com/postgresql/postgresql-"+version+"-linux-x64-binaries.tar.gz",
 			"postgres.tar.gz"); err != nil {
 
 			return errors.WithMessage(err, "download postgres")
@@ -36,7 +38,7 @@ func PreparePostgresInstallation(root string, linux bool) error {
 	} else {
 		if err := download(
 			filepath.Join(root, "download"),
-			"https://get.enterprisedb.com/postgresql/postgresql-10.1-3-osx-binaries.zip",
+			"https://get.enterprisedb.com/postgresql/postgresql-"+version+"-osx-binaries.zip",
 			"postgres.zip"); err != nil {
 
 			return errors.WithMessage(err, "download postgres")

@@ -9,6 +9,7 @@ import (
 )
 
 var Root = os.ExpandEnv("${HOME}/.pgtest")
+var Version = "10.2-1"
 
 var isLinuxSystem = runtime.GOOS == "linux"
 
@@ -18,14 +19,14 @@ type TestFunc func(db *sql.DB)
 
 func WithDatabase(t *testing.T, setup SetupFunc, test TestFunc) {
 	withCurrentT(t, func() {
-		if err := PreparePostgresInstallation(Root, isLinuxSystem); err != nil {
+		if err := PreparePostgresInstallation(Root, Version, isLinuxSystem); err != nil {
 			t.Fatalf("Could not prepare postgres installation: %s", err)
 			return
 		}
 
 		config := postgresConfig{
-			Binary:   filepath.Join(Root, "unpacked/pgsql/bin/postgres"),
-			Snapshot: filepath.Join(Root, "initdb/pgdata"),
+			Binary:   filepath.Join(Root, Version, "unpacked/pgsql/bin/postgres"),
+			Snapshot: filepath.Join(Root, Version, "initdb/pgdata"),
 		}
 
 		pg, err := startPostgresInstance(config)
