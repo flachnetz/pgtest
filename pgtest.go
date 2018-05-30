@@ -9,7 +9,7 @@ import (
 )
 
 var Root = os.ExpandEnv("${HOME}/.pgtest")
-var Version = "10.2-1"
+var Version = "10.4-1"
 
 var isLinuxSystem = runtime.GOOS == "linux"
 
