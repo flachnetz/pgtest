@@ -9,13 +9,18 @@ import (
 )
 
 var Root = os.ExpandEnv("${HOME}/.pgtest")
-var Version = "10.7-1"
+var Version = "12.1.0"
 
 var isLinuxSystem = runtime.GOOS == "linux"
 
-type SetupFunc func(db *sql.DB) error
+type SetupFunc func(db Postgres) error
 
-type TestFunc func(db *sql.DB)
+type TestFunc func(db Postgres)
+
+type Postgres struct {
+	*sql.DB
+	URL string
+}
 
 func WithDatabase(t *testing.T, setup SetupFunc, test TestFunc) {
 	withCurrentT(t, func() {
@@ -25,7 +30,7 @@ func WithDatabase(t *testing.T, setup SetupFunc, test TestFunc) {
 		}
 
 		config := postgresConfig{
-			Binary:   filepath.Join(Root, Version, "unpacked/pgsql/bin/postgres"),
+			Binary:   filepath.Join(Root, Version, "unpacked/bin/postgres"),
 			Snapshot: filepath.Join(Root, Version, "initdb/pgdata"),
 		}
 
@@ -45,15 +50,22 @@ func WithDatabase(t *testing.T, setup SetupFunc, test TestFunc) {
 
 		defer db.Close()
 
-		if err := setup(db); err != nil {
+		info := Postgres{
+			DB:  db,
+			URL: pg.URL,
+		}
+
+		if err := setup(info); err != nil {
 			t.Fatalf("Database setup failed: %s", err)
 			return
 		}
 
-		test(db)
+		test(info)
 	})
 }
 
-func NoSetup(*sql.DB) error {
+func NoSetup(Postgres) error {
 	return nil
 }
+
+var _ SetupFunc = NoSetup

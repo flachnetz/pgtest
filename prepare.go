@@ -1,6 +1,7 @@
 package pgtest
 
 import (
+	"archive/zip"
 	"fmt"
 	"github.com/pkg/errors"
 	"github.com/theckman/go-flock"
@@ -20,41 +21,53 @@ func PreparePostgresInstallation(path string, version string, linux bool) error 
 		return errors.WithMessage(err, "creating working directory")
 	}
 
+	var system string
 	if linux {
-		if err := download(
-			filepath.Join(root, "download"),
-			"https://get.enterprisedb.com/postgresql/postgresql-"+version+"-linux-x64-binaries.tar.gz",
-			"postgres.tar.gz"); err != nil {
-
-			return errors.WithMessage(err, "download postgres")
-		}
-
-		if err := execute(
-			filepath.Join(root, "unpacked"),
-			"tar", "xvf", "../download/postgres.tar.gz"); err != nil {
-
-			return errors.WithMessage(err, "unpack postgres")
-		}
+		system = "linux"
 	} else {
-		if err := download(
-			filepath.Join(root, "download"),
-			"https://get.enterprisedb.com/postgresql/postgresql-"+version+"-osx-binaries.zip",
-			"postgres.zip"); err != nil {
+		system = "darwin"
+	}
 
-			return errors.WithMessage(err, "download postgres")
-		}
+	if err := download(
+		filepath.Join(root, "download"),
+		"https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-"+system+"-amd64/"+version+"/embedded-postgres-binaries-"+system+"-amd64-"+version+".jar",
+		"postgres.jar"); err != nil {
 
-		if err := execute(
-			filepath.Join(root, "unpacked"),
-			"unzip", "../download/postgres.zip"); err != nil {
+		return errors.WithMessage(err, "download postgres")
+	}
 
-			return errors.WithMessage(err, "unpack postgres")
+	jar, err := zip.OpenReader(filepath.Join(root, "download", "postgres.jar"))
+	if err != nil {
+		return errors.WithMessagef(err, "open postgres.jar file")
+	}
+
+	defer jar.Close()
+
+	for _, file := range jar.File {
+		if file.Name == "postgres-"+system+"-x86_64.txz" {
+			r, err := file.Open()
+			if err != nil {
+				return errors.WithMessage(err, "unpack postgres.tar.gz")
+			}
+
+			defer r.Close()
+
+			if err := writeTo(filepath.Join(root, "download", "postgres.tar.gz"), r); err != nil {
+				return errors.WithMessage(err, "unpack postgres.tar.gz")
+			}
 		}
 	}
 
 	if err := execute(
+		filepath.Join(root, "unpacked"),
+		"tar", "xvf", "../download/postgres.tar.gz"); err != nil {
+
+		return errors.WithMessage(err, "unpack postgres")
+	}
+
+	if err := execute(
 		filepath.Join(root, "initdb"),
-		"../unpacked/pgsql/bin/initdb", "-U", "postgres", "-D", "pgdata", "--no-sync"); err != nil {
+		"../unpacked/bin/initdb", "-U", "postgres", "-D", "pgdata", "--no-sync"); err != nil {
 
 		return errors.WithMessage(err, "initialize pgdata snapshot")
 	}
@@ -126,4 +139,20 @@ func download(directory, url, name string) error {
 
 		return nil
 	})
+}
+
+func writeTo(target string, reader io.Reader) error {
+	fp, err := os.Create(target)
+	if err != nil {
+		return errors.WithMessagef(err, "open file at %s", target)
+	}
+
+	defer fp.Close()
+
+	_, err = io.Copy(fp, reader)
+	if err != nil {
+		return errors.WithMessagef(err, "copy to file %s", target)
+	}
+
+	return nil
 }
