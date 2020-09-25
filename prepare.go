@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"fmt"
 	"github.com/pkg/errors"
+	"github.com/theckman/go-flock"
 	"io"
 	"net/http"
 	"os"
@@ -39,7 +40,7 @@ func PreparePostgresInstallation(path string, version string, linux bool) error 
 	if err := extractTarGzFromJar(
 		filepath.Join(root, "download", "postgres.jar"),
 		filepath.Join(root, "unjar", "postgres.tar.xz"),
-		system) ; err != nil {
+		system); err != nil {
 
 		return errors.WithMessage(err, "extract tar from jar")
 	}
@@ -62,7 +63,7 @@ func PreparePostgresInstallation(path string, version string, linux bool) error 
 }
 
 func atomicOperation(target string, op func(tempTarget string) error) error {
-	lock := flock.NewFlock(target + ".lock")
+	lock := flock.New(target + ".lock")
 	if err := lock.Lock(); err != nil {
 		return errors.WithMessage(err, "get lock for download")
 	}
