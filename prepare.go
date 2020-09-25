@@ -4,11 +4,11 @@ import (
 	"archive/zip"
 	"fmt"
 	"github.com/pkg/errors"
-	"github.com/theckman/go-flock"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -36,31 +36,17 @@ func PreparePostgresInstallation(path string, version string, linux bool) error 
 		return errors.WithMessage(err, "download postgres")
 	}
 
-	jar, err := zip.OpenReader(filepath.Join(root, "download", "postgres.jar"))
-	if err != nil {
-		return errors.WithMessagef(err, "open postgres.jar file")
-	}
+	if err := extractTarGzFromJar(
+		filepath.Join(root, "download", "postgres.jar"),
+		filepath.Join(root, "unjar", "postgres.tar.xz"),
+		system) ; err != nil {
 
-	defer jar.Close()
-
-	for _, file := range jar.File {
-		if file.Name == "postgres-"+system+"-x86_64.txz" {
-			r, err := file.Open()
-			if err != nil {
-				return errors.WithMessage(err, "unpack postgres.tar.gz")
-			}
-
-			defer r.Close()
-
-			if err := writeTo(filepath.Join(root, "download", "postgres.tar.gz"), r); err != nil {
-				return errors.WithMessage(err, "unpack postgres.tar.gz")
-			}
-		}
+		return errors.WithMessage(err, "extract tar from jar")
 	}
 
 	if err := execute(
 		filepath.Join(root, "unpacked"),
-		"tar", "xvf", "../download/postgres.tar.gz"); err != nil {
+		"tar", "xvf", "../unjar/postgres.tar.xz"); err != nil {
 
 		return errors.WithMessage(err, "unpack postgres")
 	}
@@ -75,7 +61,7 @@ func PreparePostgresInstallation(path string, version string, linux bool) error 
 	return nil
 }
 
-func atomicOperation(target string, op func(string) error) error {
+func atomicOperation(target string, op func(tempTarget string) error) error {
 	lock := flock.NewFlock(target + ".lock")
 	if err := lock.Lock(); err != nil {
 		return errors.WithMessage(err, "get lock for download")
@@ -135,6 +121,41 @@ func download(directory, url, name string) error {
 
 		if _, err := io.CopyBuffer(fp, resp.Body, make([]byte, 64*1024)); err != nil {
 			return errors.WithMessage(err, "download response into file")
+		}
+
+		return nil
+	})
+}
+
+func extractTarGzFromJar(jar, tar string, system string) error {
+	target := path.Dir(tar)
+
+	return atomicOperation(target, func(tempTarget string) error {
+		fmt.Println("Extract file from jar:", jar)
+
+		jar, err := zip.OpenReader(jar)
+		if err != nil {
+			return errors.WithMessagef(err, "open postgres.jar file")
+		}
+
+		defer jar.Close()
+
+		for _, file := range jar.File {
+			if file.Name == "postgres-"+system+"-x86_64.txz" {
+				r, err := file.Open()
+				if err != nil {
+					return errors.WithMessage(err, "unpack jar entry")
+				}
+
+				//goland:noinspection GoDeferInLoop
+				defer r.Close()
+
+				if err := writeTo(filepath.Join(tempTarget, path.Base(tar)), r); err != nil {
+					return errors.WithMessage(err, "unpack jar entry")
+				}
+
+				return nil
+			}
 		}
 
 		return nil
