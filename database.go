@@ -3,8 +3,7 @@ package pgtest
 import (
 	"database/sql"
 	"time"
-
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/v4/stdlib"
 )
 
 func connect(uri string) (*sql.DB, error) {
@@ -20,7 +19,7 @@ func connect(uri string) (*sql.DB, error) {
 		}
 
 		var db *sql.DB
-		db, err = sql.Open("postgres", uri)
+		db, err = sql.Open("pgx", uri)
 		if err != nil {
 			debugf("sql.Open failed with: %s", err)
 			continue
