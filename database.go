@@ -3,7 +3,6 @@ package pgtest
 import (
 	"database/sql"
 	"time"
-	_ "github.com/jackc/pgx/v4/stdlib"
 )
 
 func connect(uri string) (*sql.DB, error) {

@@ -1,14 +1,20 @@
 module github.com/flachnetz/pgtest
 
 require (
-	github.com/gofrs/flock v0.8.0 // indirect
-	github.com/jackc/pgproto3/v2 v2.0.4 // indirect
-	github.com/jackc/pgx/v4 v4.8.1
+	github.com/jackc/pgx/v5 v5.0.4
 	github.com/pkg/errors v0.9.1
 	github.com/theckman/go-flock v0.8.0
-	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a // indirect
-	golang.org/x/sys v0.0.0-20200923182605-d9f96fdee20d // indirect
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 )
 
-go 1.13
+require (
+	github.com/gofrs/flock v0.8.0 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20200714003250-2b9c44734f2b // indirect
+	github.com/kr/text v0.2.0 // indirect
+	github.com/rogpeppe/go-internal v1.6.1 // indirect
+	golang.org/x/crypto v0.0.0-20220829220503-c86fa9a7ed90 // indirect
+	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f // indirect
+	golang.org/x/text v0.3.8 // indirect
+)
+
+go 1.19

@@ -9,7 +9,7 @@ import (
 )
 
 var Root = os.ExpandEnv("${HOME}/.pgtest")
-var Version = "12.1.0"
+var Version = "14.3.0"
 
 var isLinuxSystem = runtime.GOOS == "linux"
 
@@ -23,6 +23,7 @@ type Postgres struct {
 }
 
 func WithDatabase(t *testing.T, setup SetupFunc, test TestFunc) {
+
 	withCurrentT(t, func() {
 		if err := PreparePostgresInstallation(Root, Version, isLinuxSystem); err != nil {
 			t.Fatalf("Could not prepare postgres installation: %s", err)

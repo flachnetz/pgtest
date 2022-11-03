@@ -2,6 +2,9 @@ package pgtest
 
 import (
 	"testing"
+
+	// only register this in test. let the user bring its own pgx version
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func Test_WithDatabase(t *testing.T) {
