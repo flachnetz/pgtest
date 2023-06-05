@@ -20,12 +20,12 @@ type Instance struct {
 	cmd  *exec.Cmd
 }
 
-type postgresConfig struct {
+type InstanceConfig struct {
 	Binary   string
 	Snapshot string
 }
 
-func StartInstance(config postgresConfig) (*Instance, error) {
+func StartInstance(config InstanceConfig) (*Instance, error) {
 	tempdir := os.TempDir()
 
 	pgdata, err := os.MkdirTemp(tempdir, "pgdata")

@@ -30,10 +30,7 @@ func WithDatabase(t *testing.T, setup SetupFunc, test TestFunc) {
 			return
 		}
 
-		config := postgresConfig{
-			Binary:   filepath.Join(Root, Version, "unpacked/bin/postgres"),
-			Snapshot: filepath.Join(Root, Version, "initdb/pgdata"),
-		}
+		config := DefaultConfig()
 
 		pg, err := StartInstance(config)
 		if err != nil {
@@ -63,6 +60,13 @@ func WithDatabase(t *testing.T, setup SetupFunc, test TestFunc) {
 
 		test(info)
 	})
+}
+
+func DefaultConfig() InstanceConfig {
+	return InstanceConfig{
+		Binary:   filepath.Join(Root, Version, "unpacked/bin/postgres"),
+		Snapshot: filepath.Join(Root, Version, "initdb/pgdata"),
+	}
 }
 
 func NoSetup(Postgres) error {
