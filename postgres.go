@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 	"github.com/theckman/go-flock"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,7 +11,7 @@ import (
 	"syscall"
 )
 
-type postgresInstance struct {
+type Instance struct {
 	Data string
 	Port int
 	URL  string
@@ -26,10 +25,10 @@ type postgresConfig struct {
 	Snapshot string
 }
 
-func startPostgresInstance(config postgresConfig) (*postgresInstance, error) {
+func StartInstance(config postgresConfig) (*Instance, error) {
 	tempdir := os.TempDir()
 
-	pgdata, err := ioutil.TempDir(tempdir, "pgdata")
+	pgdata, err := os.MkdirTemp(tempdir, "pgdata")
 	if err != nil {
 		return nil, errors.WithMessage(err, "creating pgdata directory")
 	}
@@ -44,7 +43,7 @@ func startPostgresInstance(config postgresConfig) (*postgresInstance, error) {
 		return nil, errors.WithMessage(err, "get instance port")
 	}
 
-	instance := &postgresInstance{
+	instance := &Instance{
 		Data: pgdata,
 		Port: port,
 		URL:  fmt.Sprintf("user=postgres host='%s' port=%d sslmode=disable", pgdata, port),
@@ -63,23 +62,23 @@ func startPostgresInstance(config postgresConfig) (*postgresInstance, error) {
 
 	debugf("Starting new postgres instance on port %d", port)
 	if err := instance.cmd.Start(); err != nil {
-		instance.Close()
+		_ = instance.Close()
 		return nil, errors.WithMessage(err, "starting postgres process")
 	}
 
 	return instance, nil
 }
 
-func (instance *postgresInstance) Close() error {
+func (instance *Instance) Close() error {
 	debugf("Stopping postgres instance on port %d", instance.Port)
 
 	if instance.cmd.Process != nil {
 		pgid, err := syscall.Getpgid(instance.cmd.Process.Pid)
 		if err == nil {
-			syscall.Kill(-pgid, syscall.SIGKILL)
+			_ = syscall.Kill(-pgid, syscall.SIGKILL)
 		}
 
-		instance.cmd.Wait()
+		_ = instance.cmd.Wait()
 	}
 
 	// the process should now be stopped. we can free the lock
@@ -94,7 +93,7 @@ func (instance *postgresInstance) Close() error {
 
 func lockInstancePort(tempdir string) (int, *flock.Flock, error) {
 	for port := 20000; port < 21000; port++ {
-		lock := flock.NewFlock(filepath.Join(tempdir, fmt.Sprintf("pgtest-%d.lock", port)))
+		lock := flock.New(filepath.Join(tempdir, fmt.Sprintf("pgtest-%d.lock", port)))
 
 		locked, err := lock.TryLock()
 		if err != nil {

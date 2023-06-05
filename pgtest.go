@@ -35,7 +35,7 @@ func WithDatabase(t *testing.T, setup SetupFunc, test TestFunc) {
 			Snapshot: filepath.Join(Root, Version, "initdb/pgdata"),
 		}
 
-		pg, err := startPostgresInstance(config)
+		pg, err := StartInstance(config)
 		if err != nil {
 			t.Fatalf("Could not start postgres instance: %s", err)
 			return
