@@ -123,8 +123,9 @@ func lockInstancePort(tempdir string) (int, *flock.Flock, error) {
 var instance atomic.Int32
 
 type Instance struct {
-	URL  string
-	proc *Process
+	URL    string
+	dbname string
+	proc   *Process
 }
 
 func (proc *Process) Child(ctx context.Context) (*Instance, error) {
@@ -141,8 +142,9 @@ func (proc *Process) Child(ctx context.Context) (*Instance, error) {
 	}
 
 	inst := Instance{
-		URL:  proc.dns(dbname),
-		proc: proc,
+		URL:    proc.dns(dbname),
+		proc:   proc,
+		dbname: dbname,
 	}
 
 	// register us as a new child
@@ -152,6 +154,20 @@ func (proc *Process) Child(ctx context.Context) (*Instance, error) {
 }
 
 func (inst *Instance) Close() error {
+	cleanup := func() {
+		db, err := connect(context.Background(), inst.URL)
+		if err != nil {
+			return
+		}
+
+		defer db.Close()
+
+		// cleanup in background to save some space
+		_, _ = db.Exec("DROP DATABASE " + inst.dbname)
+	}
+
+	go cleanup()
+
 	// tell the parent that we're done here
 	inst.proc.children.Done()
 	return nil
