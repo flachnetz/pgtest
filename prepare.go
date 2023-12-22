@@ -3,8 +3,6 @@ package pgtest
 import (
 	"archive/zip"
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/theckman/go-flock"
 	"io"
 	"net/http"
 	"os"
@@ -13,12 +11,15 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
+	"github.com/theckman/go-flock"
 )
 
 func PreparePostgresInstallation(path string, version string, linux bool) error {
 	root := filepath.Join(path, version)
 
-	if err := os.MkdirAll(root, 0755); err != nil {
+	if err := os.MkdirAll(root, 0o755); err != nil {
 		return errors.WithMessage(err, "creating working directory")
 	}
 
@@ -33,7 +34,6 @@ func PreparePostgresInstallation(path string, version string, linux bool) error 
 		filepath.Join(root, "download"),
 		"https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-"+system+"-amd64/"+version+"/embedded-postgres-binaries-"+system+"-amd64-"+version+".jar",
 		"postgres.jar"); err != nil {
-
 		return errors.WithMessage(err, "download postgres")
 	}
 
@@ -41,21 +41,18 @@ func PreparePostgresInstallation(path string, version string, linux bool) error 
 		filepath.Join(root, "download", "postgres.jar"),
 		filepath.Join(root, "unjar", "postgres.tar.xz"),
 		system); err != nil {
-
 		return errors.WithMessage(err, "extract tar from jar")
 	}
 
 	if err := execute(
 		filepath.Join(root, "unpacked"),
 		"tar", "xvf", "../unjar/postgres.tar.xz"); err != nil {
-
 		return errors.WithMessage(err, "unpack postgres")
 	}
 
 	if err := execute(
 		filepath.Join(root, "initdb"),
 		"../unpacked/bin/initdb", "-U", "postgres", "-D", "pgdata", "--no-sync"); err != nil {
-
 		return errors.WithMessage(err, "initialize pgdata snapshot")
 	}
 
@@ -78,7 +75,7 @@ func atomicOperation(target string, op func(tempTarget string) error) error {
 	targetTemp := fmt.Sprintf("%s.%d", target, time.Now().UnixNano())
 	defer os.RemoveAll(targetTemp)
 
-	if err := os.MkdirAll(targetTemp, 0755); err != nil {
+	if err := os.MkdirAll(targetTemp, 0o755); err != nil {
 		return errors.WithMessage(err, "creating temporary directory")
 	}
 

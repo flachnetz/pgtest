@@ -1,31 +1,34 @@
 package pgtest
 
 import (
+	"context"
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/theckman/go-flock"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"syscall"
+
+	"github.com/pkg/errors"
+	"github.com/theckman/go-flock"
 )
 
-type Instance struct {
-	Data string
-	Port int
-	URL  string
-
-	lock *flock.Flock
-	cmd  *exec.Cmd
+type Process struct {
+	port     int
+	data     string
+	lock     *flock.Flock
+	cmd      *exec.Cmd
+	children sync.WaitGroup
 }
 
-type InstanceConfig struct {
+type Config struct {
 	Binary   string
 	Snapshot string
 }
 
-func StartInstance(config InstanceConfig) (*Instance, error) {
+func Start(config Config) (*Process, error) {
 	tempdir := os.TempDir()
 
 	pgdata, err := os.MkdirTemp(tempdir, "pgdata")
@@ -43,10 +46,9 @@ func StartInstance(config InstanceConfig) (*Instance, error) {
 		return nil, errors.WithMessage(err, "get instance port")
 	}
 
-	instance := &Instance{
-		Data: pgdata,
-		Port: port,
-		URL:  fmt.Sprintf("user=postgres host='%s' port=%d sslmode=disable", pgdata, port),
+	instance := &Process{
+		data: pgdata,
+		port: port,
 		lock: lock,
 		cmd: exec.Command(config.Binary,
 			"-F",
@@ -69,26 +71,36 @@ func StartInstance(config InstanceConfig) (*Instance, error) {
 	return instance, nil
 }
 
-func (instance *Instance) Close() error {
-	debugf("Stopping postgres instance on port %d", instance.Port)
+func (proc *Process) Close() error {
+	debugf("Waiting for all children of postgres to close (port %d)", proc.port)
+	proc.children.Wait()
 
-	if instance.cmd.Process != nil {
-		pgid, err := syscall.Getpgid(instance.cmd.Process.Pid)
+	debugf("Stopping postgres instance on port %d", proc.port)
+
+	if proc.cmd.Process != nil {
+		pgid, err := syscall.Getpgid(proc.cmd.Process.Pid)
 		if err == nil {
 			_ = syscall.Kill(-pgid, syscall.SIGKILL)
 		}
 
-		_ = instance.cmd.Wait()
+		_ = proc.cmd.Wait()
 	}
 
 	// the process should now be stopped. we can free the lock
 	// and let another instance run on this port.
-	if err := instance.lock.Unlock(); err != nil {
+	if err := proc.lock.Unlock(); err != nil {
 		log("could not release postgres instance lock: ", err)
 	}
 
-	err := os.RemoveAll(instance.Data)
+	err := os.RemoveAll(proc.data)
 	return errors.WithMessage(err, "cleanup of pgdata")
+}
+
+func (proc *Process) dns(dbname string) string {
+	return fmt.Sprintf(
+		"user=postgres host='%s' port=%d dbname='%s' sslmode=disable",
+		proc.data, proc.port, dbname,
+	)
 }
 
 func lockInstancePort(tempdir string) (int, *flock.Flock, error) {
@@ -106,4 +118,41 @@ func lockInstancePort(tempdir string) (int, *flock.Flock, error) {
 	}
 
 	return 0, nil, errors.New("no free port found for postgres")
+}
+
+var instance atomic.Int32
+
+type Instance struct {
+	URL  string
+	proc *Process
+}
+
+func (proc *Process) Child(ctx context.Context) (*Instance, error) {
+	pool, err := connect(ctx, proc.dns("postgres"))
+	if err != nil {
+		return nil, errors.WithMessage(err, "connect to master instance")
+	}
+
+	defer pool.Close()
+
+	dbname := fmt.Sprintf("db%d", instance.Add(1))
+	if _, err := pool.ExecContext(ctx, "CREATE DATABASE "+dbname); err != nil {
+		return nil, errors.WithMessage(err, "create child database")
+	}
+
+	inst := Instance{
+		URL:  proc.dns(dbname),
+		proc: proc,
+	}
+
+	// register us as a new child
+	proc.children.Add(1)
+
+	return &inst, nil
+}
+
+func (inst *Instance) Close() error {
+	// tell the parent that we're done here
+	inst.proc.children.Done()
+	return nil
 }

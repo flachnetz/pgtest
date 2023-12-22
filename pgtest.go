@@ -1,46 +1,54 @@
 package pgtest
 
 import (
+	"context"
 	"database/sql"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
+
+	"github.com/pkg/errors"
 )
 
-var Root = os.ExpandEnv("${HOME}/.pgtest")
-var Version = "14.3.0"
+var (
+	Root    = os.ExpandEnv("${HOME}/.pgtest")
+	Version = "16.1.0"
+)
 
 var isLinuxSystem = runtime.GOOS == "linux"
 
-type SetupFunc func(db Postgres) error
+type SetupFunc func(db Conn) error
 
-type TestFunc func(db Postgres)
+type TestFunc func(db Conn)
 
-type Postgres struct {
+type Conn struct {
 	*sql.DB
 	URL string
 }
 
-func WithDatabase(t *testing.T, setup SetupFunc, test TestFunc) {
+var (
+	procMu sync.Mutex
+	procs  map[Config]*Process
+)
 
+func WithDatabase(ctx context.Context, t *testing.T, setup SetupFunc, test TestFunc) {
 	withCurrentT(t, func() {
 		if err := PreparePostgresInstallation(Root, Version, isLinuxSystem); err != nil {
 			t.Fatalf("Could not prepare postgres installation: %s", err)
 			return
 		}
 
-		config := DefaultConfig()
-
-		pg, err := StartInstance(config)
+		pg, err := newInstance(ctx, DefaultConfig())
 		if err != nil {
-			t.Fatalf("Could not start postgres instance: %s", err)
+			t.Fatalf("Failed to start postgres: %s", err)
 			return
 		}
 
 		defer pg.Close()
 
-		db, err := connect(pg.URL)
+		db, err := connect(ctx, pg.URL)
 		if err != nil {
 			t.Fatalf("Could not open a database connection to postgres at %s: %s", pg.URL, err)
 			return
@@ -48,10 +56,7 @@ func WithDatabase(t *testing.T, setup SetupFunc, test TestFunc) {
 
 		defer db.Close()
 
-		info := Postgres{
-			DB:  db,
-			URL: pg.URL,
-		}
+		info := Conn{DB: db, URL: pg.URL}
 
 		if err := setup(info); err != nil {
 			t.Fatalf("Database setup failed: %s", err)
@@ -62,14 +67,37 @@ func WithDatabase(t *testing.T, setup SetupFunc, test TestFunc) {
 	})
 }
 
-func DefaultConfig() InstanceConfig {
-	return InstanceConfig{
+func newInstance(ctx context.Context, config Config) (*Instance, error) {
+	procMu.Lock()
+	defer procMu.Unlock()
+
+	if procs == nil {
+		procs = map[Config]*Process{}
+	}
+
+	proc, ok := procs[config]
+	if !ok {
+		var err error
+
+		proc, err = Start(config)
+		if err != nil {
+			return nil, errors.WithMessage(err, "start postgres")
+		}
+
+		procs[config] = proc
+	}
+
+	return proc.Child(ctx)
+}
+
+func DefaultConfig() Config {
+	return Config{
 		Binary:   filepath.Join(Root, Version, "unpacked/bin/postgres"),
 		Snapshot: filepath.Join(Root, Version, "initdb/pgdata"),
 	}
 }
 
-func NoSetup(Postgres) error {
+func NoSetup(Conn) error {
 	return nil
 }
 

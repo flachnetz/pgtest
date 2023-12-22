@@ -1,9 +1,10 @@
 package main
 
 import (
-	"github.com/flachnetz/pgtest"
 	"log"
 	"runtime"
+
+	"github.com/flachnetz/pgtest"
 )
 
 func main() {
