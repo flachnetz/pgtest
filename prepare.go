@@ -43,8 +43,7 @@ func PreparePostgresInstallation(path string, version string, linux bool, arch s
 
 	if err := extractTarGzFromJar(
 		filepath.Join(root, "download", "postgres.jar"),
-		filepath.Join(root, "unjar", "postgres.tar.xz"),
-		system); err != nil {
+		filepath.Join(root, "unjar", "postgres.tar.xz")); err != nil {
 		return errors.WithMessage(err, "extract tar from jar")
 	}
 
@@ -129,7 +128,7 @@ func download(directory, url, name string) error {
 	})
 }
 
-func extractTarGzFromJar(jar, tar string, system string) error {
+func extractTarGzFromJar(jar, tar string) error {
 	target := path.Dir(tar)
 
 	return atomicOperation(target, func(tempTarget string) error {
@@ -143,13 +142,14 @@ func extractTarGzFromJar(jar, tar string, system string) error {
 		defer jar.Close()
 
 		for _, file := range jar.File {
-			if file.Name == "postgres-"+system+"-x86_64.txz" {
+			// just pick the biggest file
+			if file.UncompressedSize64 > 4*1024*1024 {
 				r, err := file.Open()
 				if err != nil {
 					return errors.WithMessage(err, "unpack jar entry")
 				}
 
-				//goland:noinspection GoDeferInLoop
+				//goland:noinspection ALL
 				defer r.Close()
 
 				if err := writeTo(filepath.Join(tempTarget, path.Base(tar)), r); err != nil {
