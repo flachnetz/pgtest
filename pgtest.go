@@ -35,7 +35,7 @@ var (
 
 func WithDatabase(ctx context.Context, t *testing.T, setup SetupFunc, test TestFunc) {
 	withCurrentT(t, func() {
-		if err := PreparePostgresInstallation(Root, Version, isLinuxSystem); err != nil {
+		if err := PreparePostgresInstallation(Root, Version, isLinuxSystem, runtime.GOARCH); err != nil {
 			t.Fatalf("Could not prepare postgres installation: %s", err)
 			return
 		}

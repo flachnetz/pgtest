@@ -9,8 +9,9 @@ import (
 
 func main() {
 	linux := runtime.GOOS == "linux"
+	arch := runtime.GOARCH
 
-	err := pgtest.PreparePostgresInstallation(pgtest.Root, pgtest.Version, linux)
+	err := pgtest.PreparePostgresInstallation(pgtest.Root, pgtest.Version, linux, arch)
 	if err != nil {
 		log.Fatalf("postgres setup failed: %s", err)
 	}

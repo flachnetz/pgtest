@@ -16,7 +16,7 @@ import (
 	"github.com/theckman/go-flock"
 )
 
-func PreparePostgresInstallation(path string, version string, linux bool) error {
+func PreparePostgresInstallation(path string, version string, linux bool, arch string) error {
 	root := filepath.Join(path, version)
 
 	if err := os.MkdirAll(root, 0o755); err != nil {
@@ -30,9 +30,13 @@ func PreparePostgresInstallation(path string, version string, linux bool) error 
 		system = "darwin"
 	}
 
+	if arch == "arm64" {
+		arch = "arm64v8"
+	}
+
 	if err := download(
 		filepath.Join(root, "download"),
-		"https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-"+system+"-amd64/"+version+"/embedded-postgres-binaries-"+system+"-amd64-"+version+".jar",
+		"https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-"+system+"-"+arch+"/"+version+"/embedded-postgres-binaries-"+system+"-"+arch+"-"+version+".jar",
 		"postgres.jar"); err != nil {
 		return errors.WithMessage(err, "download postgres")
 	}
