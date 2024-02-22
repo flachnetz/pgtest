@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"os"
-	"path/filepath"
 	"runtime"
 	"sync"
 	"testing"
@@ -35,12 +34,13 @@ var (
 
 func WithDatabase(ctx context.Context, t *testing.T, setup SetupFunc, test TestFunc) {
 	withCurrentT(t, func() {
-		if err := PreparePostgresInstallation(Root, Version, isLinuxSystem, runtime.GOARCH); err != nil {
+		config, err := Install()
+		if err != nil {
 			t.Fatalf("Could not prepare postgres installation: %s", err)
 			return
 		}
 
-		pg, err := newInstance(ctx, DefaultConfig())
+		pg, err := newInstance(ctx, config)
 		if err != nil {
 			t.Fatalf("Failed to start postgres: %s", err)
 			return
@@ -88,13 +88,6 @@ func newInstance(ctx context.Context, config Config) (*Instance, error) {
 	}
 
 	return proc.Child(ctx)
-}
-
-func DefaultConfig() Config {
-	return Config{
-		Binary:   filepath.Join(Root, Version, "unpacked/bin/postgres"),
-		Snapshot: filepath.Join(Root, Version, "initdb/pgdata"),
-	}
 }
 
 func NoSetup(Conn) error {

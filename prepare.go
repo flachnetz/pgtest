@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -16,50 +16,144 @@ import (
 	"github.com/theckman/go-flock"
 )
 
-func PreparePostgresInstallation(path string, version string, linux bool, arch string) error {
-	root := filepath.Join(path, version)
+func Install() (Config, error) {
+	root := filepath.Join(Root, Version)
 
 	if err := os.MkdirAll(root, 0o755); err != nil {
-		return errors.WithMessage(err, "creating working directory")
+		return Config{}, errors.WithMessage(err, "creating working directory")
 	}
 
-	var system string
-	if linux {
-		system = "linux"
+	var install func() (string, error)
+
+	// find a way to install postgres
+	if hasNixShell() {
+		install = installViaNixStore
 	} else {
-		system = "darwin"
+		install = installPostgresViaMaven
 	}
 
-	if arch == "arm64" {
-		arch = "arm64v8"
+	// install postgres
+	path, err := install()
+	if err != nil {
+		return Config{}, errors.WithMessage(err, "install postgres with nix")
+	}
+
+	binary := filepath.Join(path + "/bin/postgres")
+	initdb := filepath.Join(path + "/bin/initdb")
+	snapshot := filepath.Join(Root, Version, "initdb")
+
+	if err := execute(
+		snapshot,
+		initdb, "-U", "postgres", "-D", "pgdata", "--no-sync"); err != nil {
+		return Config{}, errors.WithMessage(err, "initialize pgdata snapshot")
+	}
+
+	config := Config{
+		Binary:   binary,
+		Snapshot: snapshot,
+	}
+
+	return config, nil
+}
+
+func installPostgresViaMaven() (string, error) {
+	system, err := deriveSystem(runtime.GOOS)
+	if err != nil {
+		return "", err
+	}
+
+	arch, err := deriveArchitecture(runtime.GOARCH)
+	if err != nil {
+		return "", err
 	}
 
 	if err := download(
-		filepath.Join(root, "download"),
-		"https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-"+system+"-"+arch+"/"+version+"/embedded-postgres-binaries-"+system+"-"+arch+"-"+version+".jar",
+		filepath.Join(Root, Version, "download"),
+		"https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-"+system+"-"+arch+"/"+Version+"/embedded-postgres-binaries-"+system+"-"+arch+"-"+Version+".jar",
 		"postgres.jar"); err != nil {
-		return errors.WithMessage(err, "download postgres")
+		return "", errors.WithMessage(err, "download postgres")
 	}
 
 	if err := extractTarGzFromJar(
-		filepath.Join(root, "download", "postgres.jar"),
-		filepath.Join(root, "unjar", "postgres.tar.xz")); err != nil {
-		return errors.WithMessage(err, "extract tar from jar")
+		filepath.Join(Root, Version, "download", "postgres.jar"),
+		filepath.Join(Root, Version, "unjar", "postgres.tar.xz")); err != nil {
+		return "", errors.WithMessage(err, "extract tar from jar")
 	}
 
 	if err := execute(
-		filepath.Join(root, "unpacked"),
+		filepath.Join(Root, Version, "unpacked"),
 		"tar", "xvf", "../unjar/postgres.tar.xz"); err != nil {
-		return errors.WithMessage(err, "unpack postgres")
+		return "", errors.WithMessage(err, "unpack postgres")
 	}
 
-	if err := execute(
-		filepath.Join(root, "initdb"),
-		"../unpacked/bin/initdb", "-U", "postgres", "-D", "pgdata", "--no-sync"); err != nil {
-		return errors.WithMessage(err, "initialize pgdata snapshot")
+	return filepath.Join(Root, Version, "unpacked"), nil
+}
+
+func hasNixShell() bool {
+	_, err := exec.Command("which", "nix-shell").Output()
+	return err == nil
+}
+
+func installViaNixStore() (string, error) {
+	version := Version
+
+	path := filepath.Join(Root, Version, "postgres")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		return "", errors.WithMessage(err, "create postgres directory")
 	}
 
-	return nil
+	postgresPath := filepath.Join(path, "pg")
+	if _, err := os.Stat(postgresPath); err != nil {
+		if idx := strings.IndexByte(version, '.'); idx > 0 {
+			version = version[:idx]
+		}
+
+		// build an expression that should give us a postgres instance
+		expr := fmt.Sprintf("(import <nixpkgs> {}).postgresql_%s", version)
+
+		// create a derivation for postgres
+		derivation, err := exec.
+			Command("nix-instantiate", "--expr", expr).
+			Output()
+
+		if err != nil {
+			return "", errors.WithMessagef(err, "derivation for expr %q", expr)
+		}
+
+		// instantiate the postgres derivation
+		err = exec.
+			Command("nix-store", "--realize", strings.TrimSpace(string(derivation)), "--add-root", postgresPath).
+			Run()
+
+		if err != nil {
+			return "", errors.WithMessagef(err, "derivation for expr %q", expr)
+		}
+	}
+
+	return postgresPath, nil
+}
+
+func deriveArchitecture(arch string) (string, error) {
+	switch arch {
+	case "amd64":
+		return "amd64", nil
+
+	case "arm64":
+		return "arm64v8", nil
+
+	default:
+		return "", errors.Errorf("unsupported arch: %q", arch)
+	}
+}
+
+func deriveSystem(system string) (string, error) {
+	switch system {
+	case "darwin", "linux":
+		return system, nil
+
+	default:
+		return "", errors.Errorf("unsupported system %q", system)
+	}
 }
 
 func atomicOperation(target string, op func(tempTarget string) error) error {
@@ -129,7 +223,7 @@ func download(directory, url, name string) error {
 }
 
 func extractTarGzFromJar(jar, tar string) error {
-	target := path.Dir(tar)
+	target := filepath.Dir(tar)
 
 	return atomicOperation(target, func(tempTarget string) error {
 		fmt.Println("Extract file from jar:", jar)
@@ -152,7 +246,7 @@ func extractTarGzFromJar(jar, tar string) error {
 				//goland:noinspection ALL
 				defer r.Close()
 
-				if err := writeTo(filepath.Join(tempTarget, path.Base(tar)), r); err != nil {
+				if err := writeTo(filepath.Join(tempTarget, filepath.Base(tar)), r); err != nil {
 					return errors.WithMessage(err, "unpack jar entry")
 				}
 
