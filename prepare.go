@@ -38,8 +38,8 @@ func Install() (Config, error) {
 		return Config{}, errors.WithMessage(err, "install postgres with nix")
 	}
 
-	binary := filepath.Join(path + "/bin/postgres")
-	initdb := filepath.Join(path + "/bin/initdb")
+	binary := filepath.Join(path, "/bin/postgres")
+	initdb := filepath.Join(path, "/bin/initdb")
 	snapshot := filepath.Join(Root, Version, "initdb")
 
 	if err := execute(
@@ -51,6 +51,7 @@ func Install() (Config, error) {
 	config := Config{
 		Binary:   binary,
 		Snapshot: snapshot,
+		Workdir:  filepath.Join(Root, Version),
 	}
 
 	return config, nil

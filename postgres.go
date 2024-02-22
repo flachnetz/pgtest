@@ -3,16 +3,18 @@ package pgtest
 import (
 	"context"
 	"fmt"
+	"github.com/pkg/errors"
+	"github.com/theckman/go-flock"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"syscall"
-
-	"github.com/pkg/errors"
-	"github.com/theckman/go-flock"
+	"time"
 )
 
 type Process struct {
@@ -26,14 +28,15 @@ type Process struct {
 type Config struct {
 	Binary   string
 	Snapshot string
+	Workdir  string
 }
 
 func Start(config Config) (*Process, error) {
 	tempdir := os.TempDir()
 
-	pgdata, err := os.MkdirTemp(tempdir, "pgdata")
+	pgdata, err := prepareSnapshot(config)
 	if err != nil {
-		return nil, errors.WithMessage(err, "creating pgdata directory")
+		return nil, errors.WithMessage(err, "prepare snapshot")
 	}
 
 	debugf("Setup pgdata at %s", pgdata)
@@ -59,6 +62,8 @@ func Start(config Config) (*Process, error) {
 			"-c", "unix_socket_directories="+pgdata),
 	}
 
+	fmt.Println(instance.cmd.Args)
+
 	instance.cmd.Stderr = logWriter("postgres")
 	modifyProcessOnSystem(instance.cmd)
 
@@ -69,6 +74,56 @@ func Start(config Config) (*Process, error) {
 	}
 
 	return instance, nil
+}
+
+func prepareSnapshot(config Config) (string, error) {
+	lockfile := filepath.Join(config.Workdir, "snapshots.lock")
+	lock := flock.New(lockfile)
+
+	if err := lock.Lock(); err != nil {
+		return "", errors.WithMessage(err, "getting lockfile")
+	}
+
+	defer lock.Unlock()
+
+	// check for files
+	f := os.DirFS(config.Workdir)
+
+	entries, err := fs.ReadDir(f, ".")
+	if err != nil {
+		return "", errors.WithMessage(err, "read directory")
+	}
+
+	var maxIndex int
+
+	pName := regexp.MustCompile("pgtest-([0-9]+)")
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		match := pName.FindStringSubmatch(entry.Name())
+		if match == nil {
+			continue
+		}
+
+		idx, _ := strconv.Atoi(match[1])
+		maxIndex = max(maxIndex, idx)
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		if time.Since(info.ModTime()) > 10*time.Minute {
+			// found an old snapshot to cleanup
+			_ = os.RemoveAll(filepath.Join(config.Workdir, entry.Name()))
+		}
+	}
+
+	path := filepath.Join(config.Workdir, fmt.Sprintf("pgtest-%d", maxIndex+1))
+	return path, nil
 }
 
 func (proc *Process) Close() error {
