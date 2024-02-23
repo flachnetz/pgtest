@@ -39,11 +39,6 @@ func Start(config Config) (*Process, error) {
 		return nil, errors.WithMessage(err, "prepare snapshot")
 	}
 
-	debugf("Setup pgdata at %s", pgdata)
-	if err := exec.Command("cp", "-r", config.Snapshot, pgdata).Run(); err != nil {
-		return nil, errors.WithMessage(err, "copy snapshot to tempdir")
-	}
-
 	port, lock, err := lockInstancePort(tempdir)
 	if err != nil {
 		return nil, errors.WithMessage(err, "get instance port")
@@ -122,8 +117,14 @@ func prepareSnapshot(config Config) (string, error) {
 		}
 	}
 
-	path := filepath.Join(config.Workdir, fmt.Sprintf("pgtest-%d", maxIndex+1))
-	return path, nil
+	pgdata := filepath.Join(config.Workdir, fmt.Sprintf("pgtest-%d", maxIndex+1))
+
+	debugf("Setup pgdata at %s", pgdata)
+	if err := exec.Command("cp", "-r", config.Snapshot, pgdata).Run(); err != nil {
+		return "", errors.WithMessagef(err, "copy snapshot to %q", pgdata)
+	}
+
+	return pgdata, nil
 }
 
 func (proc *Process) Close() error {
