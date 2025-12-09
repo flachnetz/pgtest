@@ -17,30 +17,46 @@ import (
 )
 
 func Install() (Config, error) {
-	root := filepath.Join(Root, Version)
+	version := Version
+	if v := os.Getenv("PGTEST_VERSION"); v != "" {
+		version = v
+	}
+
+	return InstallVersion(version)
+}
+
+func InstallVersion(version string) (Config, error) {
+
+	root := filepath.Join(Root, version)
 
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return Config{}, errors.WithMessage(err, "creating working directory")
 	}
 
-	var install func() (string, error)
+	var install func(version string) (string, error)
+	var fallbackInstall func(version string) (string, error)
 
 	// find a way to install postgres
-	if hasNixShell() {
+	useNix := hasNixShell()
+	if useNix {
 		install = installViaNixStore
+		fallbackInstall = installPostgresViaMaven
 	} else {
 		install = installPostgresViaMaven
+		fallbackInstall = installViaNixStore
 	}
 
 	// install postgres
-	path, err := install()
+	path, err := install(version)
 	if err != nil {
+		log(fmt.Sprintf("failed to install postgres version %s: %s, trying fallback method", version, err.Error()))
+		path, err = fallbackInstall(version)
 		return Config{}, errors.WithMessage(err, "install postgres with nix")
 	}
 
 	binary := filepath.Join(path, "/bin/postgres")
 	initdb := filepath.Join(path, "/bin/initdb")
-	snapshot := filepath.Join(Root, Version, "initdb")
+	snapshot := filepath.Join(Root, version, "initdb")
 
 	if err := execute(
 		snapshot,
@@ -51,13 +67,13 @@ func Install() (Config, error) {
 	config := Config{
 		Binary:   binary,
 		Snapshot: snapshot,
-		Workdir:  filepath.Join(Root, Version),
+		Workdir:  filepath.Join(Root, version),
 	}
 
 	return config, nil
 }
 
-func installPostgresViaMaven() (string, error) {
+func installPostgresViaMaven(version string) (string, error) {
 	system, err := deriveSystem(runtime.GOOS)
 	if err != nil {
 		return "", err
@@ -69,25 +85,25 @@ func installPostgresViaMaven() (string, error) {
 	}
 
 	if err := download(
-		filepath.Join(Root, Version, "download"),
-		"https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-"+system+"-"+arch+"/"+Version+"/embedded-postgres-binaries-"+system+"-"+arch+"-"+Version+".jar",
+		filepath.Join(Root, version, "download"),
+		"https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-"+system+"-"+arch+"/"+version+"/embedded-postgres-binaries-"+system+"-"+arch+"-"+version+".jar",
 		"postgres.jar"); err != nil {
 		return "", errors.WithMessage(err, "download postgres")
 	}
 
 	if err := extractTarGzFromJar(
-		filepath.Join(Root, Version, "download", "postgres.jar"),
-		filepath.Join(Root, Version, "unjar", "postgres.tar.xz")); err != nil {
+		filepath.Join(Root, version, "download", "postgres.jar"),
+		filepath.Join(Root, version, "unjar", "postgres.tar.xz")); err != nil {
 		return "", errors.WithMessage(err, "extract tar from jar")
 	}
 
 	if err := execute(
-		filepath.Join(Root, Version, "unpacked"),
+		filepath.Join(Root, version, "unpacked"),
 		"tar", "xvf", "../unjar/postgres.tar.xz"); err != nil {
 		return "", errors.WithMessage(err, "unpack postgres")
 	}
 
-	return filepath.Join(Root, Version, "unpacked"), nil
+	return filepath.Join(Root, version, "unpacked"), nil
 }
 
 func hasNixShell() bool {
@@ -95,10 +111,9 @@ func hasNixShell() bool {
 	return err == nil
 }
 
-func installViaNixStore() (string, error) {
-	version := Version
+func installViaNixStore(version string) (string, error) {
 
-	path := filepath.Join(Root, Version, "postgres")
+	path := filepath.Join(Root, version, "postgres")
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		return "", errors.WithMessage(err, "create postgres directory")
 	}

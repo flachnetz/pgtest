@@ -13,7 +13,7 @@ import (
 
 var (
 	Root    = os.ExpandEnv("${HOME}/.pgtest")
-	Version = "16.1.0"
+	Version = "17.7.0"
 )
 
 var isLinuxSystem = runtime.GOOS == "linux"
