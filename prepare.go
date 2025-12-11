@@ -108,17 +108,8 @@ func installPostgresViaMaven(version string) (string, error) {
 
 	if err := execute(
 		filepath.Join(Root, version, "unpacked"),
-		"xz", "-d", "../unjar/postgres.tar.xz"); err != nil {
-		// print path to xz for easier debugging
-		xzPath, _ := exec.LookPath("xz")
-		log("used xz at path: " + xzPath)
-		return "", errors.WithMessage(err, "unpack postgres xz")
-	}
-
-	if err := execute(
-		filepath.Join(Root, version, "unpacked"),
-		"tar", "xf", "../unjar/postgres.tar"); err != nil {
-		return "", errors.WithMessage(err, "unpack postgres tar")
+		"tar", "xf", "../unjar/postgres.tar.xz"); err != nil {
+		return "", errors.WithMessage(err, "unpack postgres")
 	}
 
 	return filepath.Join(Root, version, "unpacked"), nil
