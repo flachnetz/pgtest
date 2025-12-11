@@ -44,6 +44,12 @@ func InstallVersion(version string) (Config, error) {
 		install = installPostgresViaMaven
 	}
 
+	if os.Getenv("PGTEST_FORCE_MAVEN") == "1" {
+		log("forcing maven installation for postgres version " + version)
+		install = installPostgresViaMaven
+		fallbackInstall = nil
+	}
+
 	// install postgres
 	path, err := install(version)
 	if err != nil {
