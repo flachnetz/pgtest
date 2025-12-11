@@ -213,15 +213,9 @@ func execute(directory string, command ...string) error {
 		cmd := exec.Command(command[0], command[1:]...)
 		cmd.Dir = directory
 
-		err := cmd.Run()
-		if err != nil {
-			// in case of error, capture stdout and stderr
-			cmdOutput, cmdErr := cmd.CombinedOutput()
-			if cmdErr != nil {
-				return errors.WithMessagef(cmdErr, "execute command %q in %s: %s - original error: %s", strings.Join(command, " "), directory, string(cmdOutput), err.Error())
-			}
-
-			return errors.WithMessagef(err, "execute command %q in %s: %s", strings.Join(command, " "), directory, string(cmdOutput))
+		cmdOutput, cmdErr := cmd.CombinedOutput()
+		if cmdErr != nil {
+			return errors.WithMessagef(cmdErr, "execute command %q in %s: %s", strings.Join(command, " "), directory, string(cmdOutput))
 		}
 		return nil
 	})
