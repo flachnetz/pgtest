@@ -1,8 +1,9 @@
 package main
 
 import (
-	"github.com/flachnetz/pgtest"
 	"log"
+
+	"github.com/flachnetz/pgtest"
 )
 
 func main() {

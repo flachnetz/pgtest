@@ -3,8 +3,6 @@ package pgtest
 import (
 	"context"
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/theckman/go-flock"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -15,6 +13,9 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/pkg/errors"
+	"github.com/theckman/go-flock"
 )
 
 type Process struct {

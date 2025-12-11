@@ -26,7 +26,6 @@ func Install() (Config, error) {
 }
 
 func InstallVersion(version string) (Config, error) {
-
 	root := filepath.Join(Root, version)
 
 	if err := os.MkdirAll(root, 0o755); err != nil {
@@ -43,15 +42,19 @@ func InstallVersion(version string) (Config, error) {
 		fallbackInstall = installPostgresViaMaven
 	} else {
 		install = installPostgresViaMaven
-		fallbackInstall = installViaNixStore
 	}
 
 	// install postgres
 	path, err := install(version)
 	if err != nil {
-		log(fmt.Sprintf("failed to install postgres version %s: %s, trying fallback method", version, err.Error()))
-		path, err = fallbackInstall(version)
-		return Config{}, errors.WithMessage(err, "install postgres with nix")
+		log(fmt.Sprintf("failed to install postgres version %s: %s", version, err.Error()))
+		if fallbackInstall != nil {
+			log(fmt.Sprintf("falling back to alternative installation method for postgres version %s", version))
+			path, err = fallbackInstall(version)
+		}
+		if err != nil {
+			return Config{}, errors.WithMessagef(err, "install postgres version %s", version)
+		}
 	}
 
 	binary := filepath.Join(path, "/bin/postgres")
@@ -112,7 +115,6 @@ func hasNixShell() bool {
 }
 
 func installViaNixStore(version string) (string, error) {
-
 	path := filepath.Join(Root, version, "postgres")
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		return "", errors.WithMessage(err, "create postgres directory")
@@ -131,7 +133,6 @@ func installViaNixStore(version string) (string, error) {
 		derivation, err := exec.
 			Command("nix-instantiate", "--expr", expr).
 			Output()
-
 		if err != nil {
 			return "", errors.WithMessagef(err, "derivation for expr %q", expr)
 		}
@@ -140,7 +141,6 @@ func installViaNixStore(version string) (string, error) {
 		err = exec.
 			Command("nix-store", "--realize", strings.TrimSpace(string(derivation)), "--add-root", postgresPath).
 			Run()
-
 		if err != nil {
 			return "", errors.WithMessagef(err, "derivation for expr %q", expr)
 		}
