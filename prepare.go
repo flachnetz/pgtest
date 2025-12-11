@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gofrs/flock"
 	"github.com/pkg/errors"
-	"github.com/theckman/go-flock"
 )
 
 func Install() (Config, error) {

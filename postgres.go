@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gofrs/flock"
 	"github.com/pkg/errors"
-	"github.com/theckman/go-flock"
 )
 
 type Process struct {
