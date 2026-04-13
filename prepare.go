@@ -15,8 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"errors"
-
 	"github.com/gofrs/flock"
 )
 
@@ -200,7 +198,7 @@ func deriveArchitecture(arch string) (string, error) {
 		return "arm64v8", nil
 
 	default:
-		return "", errors.Errorf("unsupported arch: %q", arch)
+		return "", fmt.Errorf("unsupported arch: %q", arch)
 	}
 }
 
@@ -210,7 +208,7 @@ func deriveSystem(system string) (string, error) {
 		return system, nil
 
 	default:
-		return "", errors.Errorf("unsupported system %q", system)
+		return "", fmt.Errorf("unsupported system %q", system)
 	}
 }
 
