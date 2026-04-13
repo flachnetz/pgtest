@@ -3,95 +3,97 @@ package pgtest
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
-	"runtime"
 	"sync"
 	"testing"
-
-	"github.com/pkg/errors"
 )
 
 var (
 	Root    = os.ExpandEnv("${HOME}/.pgtest")
-	Version = "17.7.0"
+	Version = "18.3.0"
 )
 
-var isLinuxSystem = runtime.GOOS == "linux"
+type SetupFunc func(db *sql.DB) error
 
-type SetupFunc func(db Conn) error
+// ConnectionString creates a new postgres instance & database and returns the connection string
+// to this database as soon as it is reachable.
+func ConnectionString(t testing.TB) string {
+	t.Helper()
 
-type TestFunc func(db Conn)
-
-type Conn struct {
-	*sql.DB
-	URL string
-}
-
-var (
-	procMu sync.Mutex
-	procs  map[Config]*Process
-)
-
-func WithDatabase(ctx context.Context, t *testing.T, setup SetupFunc, test TestFunc) {
-	withCurrentT(t, func() {
-		config, err := Install()
-		if err != nil {
-			t.Fatalf("Could not prepare postgres installation: %s", err)
-			return
-		}
-
-		pg, err := newInstance(ctx, config)
-		if err != nil {
-			t.Fatalf("Failed to start postgres: %s", err)
-			return
-		}
-
-		defer pg.Close()
-
-		db, err := connect(ctx, pg.URL)
-		if err != nil {
-			t.Fatalf("Could not open a database connection to postgres at %s: %s", pg.URL, err)
-			return
-		}
-
-		defer db.Close()
-
-		info := Conn{DB: db, URL: pg.URL}
-
-		if err := setup(info); err != nil {
-			t.Fatalf("Database setup failed: %s", err)
-			return
-		}
-
-		test(info)
-	})
-}
-
-func newInstance(ctx context.Context, config Config) (*Instance, error) {
-	procMu.Lock()
-	defer procMu.Unlock()
-
-	if procs == nil {
-		procs = map[Config]*Process{}
+	config, err := Install(t)
+	if err != nil {
+		t.Fatalf("Could not prepare postgres installation: %s", err)
 	}
+
+	pg, err := newInstance(t.Context(), t, config)
+	if err != nil {
+		t.Fatalf("Failed to start postgres: %s", err)
+	}
+
+	t.Cleanup(func() { _ = pg.Close() })
+
+	db, err := connect(t.Context(), t, pg.URL)
+	if err != nil {
+		t.Fatalf("Could not open a database connection to postgres at %q: %s", pg.URL, err)
+	}
+
+	_ = db.Close()
+
+	return pg.URL
+}
+
+func Connect(t testing.TB) *sql.DB {
+	t.Helper()
+
+	dsn := ConnectionString(t)
+
+	db, err := connect(t.Context(), t, dsn)
+	if err != nil {
+		t.Fatalf("Could not open a database connection to postgres at %q: %s", dsn, err)
+	}
+
+	t.Cleanup(func() { _ = db.Close() })
+	return db
+}
+
+func ConnectWithSetup(t testing.TB, setup SetupFunc) *sql.DB {
+	t.Helper()
+
+	dsn := ConnectionString(t)
+
+	db, err := connect(t.Context(), t, dsn)
+	if err != nil {
+		t.Fatalf("Could not open a database connection to postgres at %q: %s", dsn, err)
+	}
+
+	t.Cleanup(func() { _ = db.Close() })
+
+	if err := setup(db); err != nil {
+		t.Fatalf("Failed to setup database: %s", err)
+	}
+
+	return db
+}
+
+var procsMu sync.Mutex
+var procs = map[Config]*pgProcess{}
+
+func newInstance(ctx context.Context, log logger, config Config) (*pgInstance, error) {
+	procsMu.Lock()
+	defer procsMu.Unlock()
 
 	proc, ok := procs[config]
 	if !ok {
 		var err error
 
-		proc, err = Start(config)
+		proc, err = pgStart(log, config)
 		if err != nil {
-			return nil, errors.WithMessage(err, "start postgres")
+			return nil, fmt.Errorf("start postgres: %w", err)
 		}
 
 		procs[config] = proc
 	}
 
-	return proc.Child(ctx)
+	return proc.Instance(ctx)
 }
-
-func NoSetup(Conn) error {
-	return nil
-}
-
-var _ SetupFunc = NoSetup

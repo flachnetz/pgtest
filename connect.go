@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func connect(ctx context.Context, uri string) (*sql.DB, error) {
+func connect(ctx context.Context, log logger, uri string) (*sql.DB, error) {
 	var err error
 	for idx := 0; idx < 100; idx++ {
 		if err := ctx.Err(); err != nil {
@@ -24,14 +24,14 @@ func connect(ctx context.Context, uri string) (*sql.DB, error) {
 		var db *sql.DB
 		db, err = sql.Open("pgx", uri)
 		if err != nil {
-			debugf("sql.Open failed with: %s", err)
+			log.Logf("Polling database: sql.Open failed with: %s", err)
 			continue
 		}
 
 		if err = db.PingContext(ctx); err != nil {
-			debugf("sql.Ping failed with: %s", err)
+			log.Logf("Polling database: sql.Ping failed with: %s", err)
 
-			db.Close()
+			_ = db.Close()
 			continue
 		}
 

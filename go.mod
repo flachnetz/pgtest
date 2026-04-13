@@ -1,9 +1,8 @@
-module github.com/flachnetz/pgtest
+module github.com/flachnetz/pgtest/v2
 
 require (
 	github.com/gofrs/flock v0.13.0
 	github.com/jackc/pgx/v5 v5.7.6
-	github.com/pkg/errors v0.9.1
 )
 
 require (
