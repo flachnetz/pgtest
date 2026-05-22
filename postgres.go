@@ -2,6 +2,7 @@ package pgtest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -13,8 +14,6 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-
-	"errors"
 
 	"github.com/gofrs/flock"
 )

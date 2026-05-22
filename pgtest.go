@@ -26,14 +26,17 @@ func ConnectionString(t testing.TB) string {
 		t.Fatalf("Could not prepare postgres installation: %s", err)
 	}
 
-	pg, err := newInstance(t.Context(), t, config)
+	safe := &safeLogger{l: t}
+	t.Cleanup(safe.disable)
+
+	pg, err := newInstance(t.Context(), safe, config)
 	if err != nil {
 		t.Fatalf("Failed to start postgres: %s", err)
 	}
 
 	t.Cleanup(func() { _ = pg.Close() })
 
-	db, err := connect(t.Context(), t, pg.URL)
+	db, err := connect(t.Context(), safe, pg.URL)
 	if err != nil {
 		t.Fatalf("Could not open a database connection to postgres at %q: %s", pg.URL, err)
 	}
@@ -48,7 +51,10 @@ func Connect(t testing.TB) *sql.DB {
 
 	dsn := ConnectionString(t)
 
-	db, err := connect(t.Context(), t, dsn)
+	safe := &safeLogger{l: t}
+	t.Cleanup(safe.disable)
+
+	db, err := connect(t.Context(), safe, dsn)
 	if err != nil {
 		t.Fatalf("Could not open a database connection to postgres at %q: %s", dsn, err)
 	}
@@ -62,7 +68,10 @@ func ConnectWithSetup(t testing.TB, setup SetupFunc) *sql.DB {
 
 	dsn := ConnectionString(t)
 
-	db, err := connect(t.Context(), t, dsn)
+	safe := &safeLogger{l: t}
+	t.Cleanup(safe.disable)
+
+	db, err := connect(t.Context(), safe, dsn)
 	if err != nil {
 		t.Fatalf("Could not open a database connection to postgres at %q: %s", dsn, err)
 	}
@@ -76,8 +85,10 @@ func ConnectWithSetup(t testing.TB, setup SetupFunc) *sql.DB {
 	return db
 }
 
-var procsMu sync.Mutex
-var procs = map[Config]*pgProcess{}
+var (
+	procsMu sync.Mutex
+	procs   = map[Config]*pgProcess{}
+)
 
 func newInstance(ctx context.Context, log logger, config Config) (*pgInstance, error) {
 	procsMu.Lock()
