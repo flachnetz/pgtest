@@ -97,3 +97,11 @@ func newInstance(ctx context.Context, log logger, config Config) (*pgInstance, e
 
 	return proc.Instance(ctx)
 }
+
+// removeFromCache removes the given config's process from the cache so it
+// can be cleaned up when the last child closes.
+func removeFromCache(config Config) {
+	procsMu.Lock()
+	delete(procs, config)
+	procsMu.Unlock()
+}

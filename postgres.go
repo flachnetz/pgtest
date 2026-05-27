@@ -20,12 +20,15 @@ import (
 )
 
 type pgProcess struct {
-	log      logger
-	port     int
-	data     string
-	lock     *flock.Flock
-	cmd      *exec.Cmd
-	children sync.WaitGroup
+	log    logger
+	port   int
+	data   string
+	lock   *flock.Flock
+	cmd    *exec.Cmd
+	config Config
+
+	childMu    sync.Mutex
+	childCount int
 }
 
 // pgStart will create a new postgres process for the given postgres config.
@@ -43,10 +46,11 @@ func pgStart(log logger, config Config) (*pgProcess, error) {
 	}
 
 	instance := &pgProcess{
-		log:  log,
-		data: data,
-		port: port,
-		lock: lock,
+		log:    log,
+		data:   data,
+		port:   port,
+		lock:   lock,
+		config: config,
 		cmd: exec.Command(config.Binary,
 			"-F",
 			"-D", data+"/pgdata",
@@ -55,8 +59,6 @@ func pgStart(log logger, config Config) (*pgProcess, error) {
 			"-c", "autovacuum=off",
 			"-c", "unix_socket_directories="+data),
 	}
-
-	fmt.Println(instance.cmd.Args)
 
 	instance.cmd.Stderr = logWriter(log, "postgres")
 	modifyProcessOnSystem(instance.cmd)
@@ -71,19 +73,9 @@ func pgStart(log logger, config Config) (*pgProcess, error) {
 }
 
 func (proc *pgProcess) Close() error {
-	proc.log.Logf("Waiting for all children of postgres to close (port %d)", proc.port)
-	proc.children.Wait()
-
 	proc.log.Logf("Stopping postgres instance on port %d", proc.port)
 
-	if proc.cmd.Process != nil {
-		pgid, err := syscall.Getpgid(proc.cmd.Process.Pid)
-		if err == nil {
-			_ = syscall.Kill(-pgid, syscall.SIGKILL)
-		}
-
-		_ = proc.cmd.Wait()
-	}
+	proc.stopProcess()
 
 	// the process should now be stopped. we can free the lock
 	// and let another instance run on this port.
@@ -102,6 +94,37 @@ func (proc *pgProcess) Close() error {
 	}
 
 	return nil
+}
+
+// stopProcess sends SIGINT to the postgres process group for fast shutdown,
+// then falls back to SIGKILL if it doesn't exit within 10 seconds. Fast
+// shutdown (SIGINT) lets postgres clean up IPC resources (shared memory,
+// semaphores). SIGKILL should be avoided as it prevents IPC cleanup.
+func (proc *pgProcess) stopProcess() {
+	if proc.cmd.Process == nil {
+		return
+	}
+
+	pgid, err := syscall.Getpgid(proc.cmd.Process.Pid)
+	if err != nil {
+		_ = proc.cmd.Wait()
+		return
+	}
+
+	_ = syscall.Kill(-pgid, syscall.SIGINT)
+
+	done := make(chan struct{})
+	go func() {
+		_ = proc.cmd.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		_ = syscall.Kill(-pgid, syscall.SIGKILL)
+		_ = proc.cmd.Wait()
+	}
 }
 
 func (proc *pgProcess) dns(dbname string) string {
@@ -206,8 +229,18 @@ type pgInstance struct {
 // Instance returns a new child instance for this process.
 func (proc *pgProcess) Instance(ctx context.Context) (*pgInstance, error) {
 	// temporarily register us as a new child
-	proc.children.Add(1)
-	defer proc.children.Done()
+	proc.childMu.Lock()
+	proc.childCount++
+	proc.childMu.Unlock()
+
+	cleanup := true
+	defer func() {
+		if cleanup {
+			proc.childMu.Lock()
+			proc.childCount--
+			proc.childMu.Unlock()
+		}
+	}()
 
 	db, err := connect(ctx, proc.log, proc.dns("postgres"))
 	if err != nil {
@@ -228,34 +261,42 @@ func (proc *pgProcess) Instance(ctx context.Context) (*pgInstance, error) {
 	}
 
 	// success, register us as a new child, will be released in Close()
-	proc.children.Add(1)
+	proc.childMu.Lock()
+	proc.childCount++
+	proc.childMu.Unlock()
 
 	return &inst, nil
 }
 
 func (inst *pgInstance) Close() error {
-	cleanup := func() {
-		// wait a moment to give a different test the possibility to grab the
-		// parent process before we shut it down.
-		time.Sleep(1 * time.Second)
+	inst.proc.childMu.Lock()
+	inst.proc.childCount--
+	lastChild := inst.proc.childCount == 0
+	inst.proc.childMu.Unlock()
 
-		// tell the process that we're done here
-		defer inst.proc.children.Done()
+	if lastChild {
+		removeFromCache(inst.proc.config)
+		inst.proc.stopProcess()
+		_ = inst.proc.lock.Unlock()
+		_ = inst.proc.lock.Close()
+		_ = os.RemoveAll(inst.proc.data)
+		return nil
+	}
 
-		parentUrl := inst.proc.dns("postgres")
-		db, err := connect(context.Background(), inst.proc.log, parentUrl)
+	// Drop the database in the background to avoid blocking the test.
+	parentUrl := inst.proc.dns("postgres")
+	log := inst.proc.log
+	dbname := inst.dbname
+	go func() {
+		db, err := connect(context.Background(), log, parentUrl)
 		if err != nil {
 			return
 		}
 
 		defer func() { _ = db.Close() }()
 
-		// cleanup in background to save some space
-		_, _ = db.Exec("DROP DATABASE " + inst.dbname)
-	}
-
-	// run cleanup in background
-	go cleanup()
+		_, _ = db.Exec("DROP DATABASE " + dbname)
+	}()
 
 	return nil
 }
