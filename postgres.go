@@ -153,6 +153,30 @@ func (proc *Process) Close() error {
 	return errors.WithMessage(err, "cleanup of pgdata")
 }
 
+// forceClose kills the postgres process unconditionally, without waiting for
+// children to finish. Only use this in error-recovery and TestMain cleanup paths.
+func (proc *Process) forceClose() {
+	if proc.cmd.Process != nil {
+		pgid, err := syscall.Getpgid(proc.cmd.Process.Pid)
+		if err == nil {
+			_ = syscall.Kill(-pgid, syscall.SIGKILL)
+		}
+		_ = proc.cmd.Wait()
+	}
+	_ = proc.lock.Unlock()
+	_ = os.RemoveAll(proc.data)
+}
+
+func (proc *Process) alive() error {
+	if proc.cmd.Process == nil {
+		return nil
+	}
+	if err := proc.cmd.Process.Signal(syscall.Signal(0)); err != nil {
+		return fmt.Errorf("postgres process died during startup: %w", err)
+	}
+	return nil
+}
+
 func (proc *Process) dns(dbname string) string {
 	return fmt.Sprintf(
 		"user=postgres host='%s' port=%d dbname='%s' sslmode=disable",
@@ -186,7 +210,7 @@ type Instance struct {
 }
 
 func (proc *Process) Child(ctx context.Context) (*Instance, error) {
-	pool, err := connect(ctx, proc.dns("postgres"))
+	pool, err := connect(ctx, proc.dns("postgres"), proc.alive)
 	if err != nil {
 		return nil, errors.WithMessage(err, "connect to master instance")
 	}
@@ -212,7 +236,7 @@ func (proc *Process) Child(ctx context.Context) (*Instance, error) {
 
 func (inst *Instance) Close() error {
 	cleanup := func() {
-		db, err := connect(context.Background(), inst.URL)
+		db, err := connect(context.Background(), inst.URL, nil)
 		if err != nil {
 			return
 		}

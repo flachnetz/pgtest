@@ -6,11 +6,17 @@ import (
 	"time"
 )
 
-func connect(ctx context.Context, uri string) (*sql.DB, error) {
+func connect(ctx context.Context, uri string, alive func() error) (*sql.DB, error) {
 	var err error
 	for idx := 0; idx < 100; idx++ {
 		if err := ctx.Err(); err != nil {
 			return nil, err
+		}
+
+		if alive != nil {
+			if err := alive(); err != nil {
+				return nil, err
+			}
 		}
 
 		if idx > 0 && idx < 20 {

@@ -48,7 +48,7 @@ func WithDatabase(ctx context.Context, t *testing.T, setup SetupFunc, test TestF
 
 		defer pg.Close()
 
-		db, err := connect(ctx, pg.URL)
+		db, err := connect(ctx, pg.URL, nil)
 		if err != nil {
 			t.Fatalf("Could not open a database connection to postgres at %s: %s", pg.URL, err)
 			return
@@ -87,7 +87,14 @@ func newInstance(ctx context.Context, config Config) (*Instance, error) {
 		procs[config] = proc
 	}
 
-	return proc.Child(ctx)
+	inst, err := proc.Child(ctx)
+	if err != nil {
+		delete(procs, config)
+		_ = proc.Close()
+		return nil, errors.WithMessage(err, "start postgres")
+	}
+
+	return inst, nil
 }
 
 func NoSetup(Conn) error {
@@ -95,3 +102,25 @@ func NoSetup(Conn) error {
 }
 
 var _ SetupFunc = NoSetup
+
+// Cleanup stops all cached postgres processes and removes their data directories.
+// Call this from TestMain after m.Run() returns:
+//
+//	func TestMain(m *testing.M) {
+//	    code := m.Run()
+//	    pgtest.Cleanup()
+//	    os.Exit(code)
+//	}
+func Cleanup() {
+	procMu.Lock()
+	procsCopy := make([]*Process, 0, len(procs))
+	for _, p := range procs {
+		procsCopy = append(procsCopy, p)
+	}
+	procs = nil
+	procMu.Unlock()
+
+	for _, p := range procsCopy {
+		p.forceClose()
+	}
+}
