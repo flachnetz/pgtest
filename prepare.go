@@ -268,6 +268,11 @@ func download(log logger, directory, url, name string) error {
 
 		defer resp.Body.Close()
 
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("download failed with status %d: %q", resp.StatusCode, string(body))
+		}
+
 		// write the partial download to a temporary file
 		fp, err := os.Create(filepath.Join(target, name))
 		if err != nil {
