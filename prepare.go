@@ -107,6 +107,7 @@ func doInstallVersion(t testing.TB, version string) (Config, error) {
 	snapshot := filepath.Join(Root, version, "initdb")
 
 	if err := execute(
+		t,
 		snapshot,
 		initdb, "-U", "postgres", "-D", "pgdata", "--no-sync"); err != nil {
 		return Config{}, fmt.Errorf("initialize pgdata snapshot: %w", err)
@@ -147,6 +148,7 @@ func installPostgresFromGitHub(log logger, version string) (string, error) {
 	}
 
 	if err := execute(
+		log,
 		filepath.Join(path, "unpacked"),
 		"tar", "xzf", "../download/postgres.tar.gz"); err != nil {
 		return "", fmt.Errorf("unpack postgres: %w", err)
@@ -257,9 +259,9 @@ func atomicOperation(target string, op func(tempTarget string) error) error {
 	return os.Rename(targetTemp, target)
 }
 
-func execute(directory string, command ...string) error {
+func execute(log logger, directory string, command ...string) error {
 	return atomicOperation(directory, func(directory string) error {
-		fmt.Println("Run shell command: ", strings.Join(command, " "))
+		log.Log("Run shell command: ", strings.Join(command, " "))
 
 		cmd := exec.Command(command[0], command[1:]...)
 		cmd.Dir = directory
