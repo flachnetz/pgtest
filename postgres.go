@@ -19,6 +19,11 @@ import (
 	"github.com/gofrs/flock"
 )
 
+func isVerbose() bool {
+	v := os.Getenv("PGTEST_VERBOSE")
+	return v == "1" || v == "true"
+}
+
 type pgProcess struct {
 	log    logger
 	port   int
@@ -45,22 +50,31 @@ func pgStart(log logger, config Config) (*pgProcess, error) {
 		return nil, fmt.Errorf("get instance port: %w", err)
 	}
 
+	args := []string{
+		"-F",
+		"-D", data + "/pgdata",
+		"-p", strconv.Itoa(port),
+		"-c", "listen_addresses=",
+		"-c", "autovacuum=off",
+		"-c", "unix_socket_directories=" + data,
+	}
+
+	if !isVerbose() {
+		args = append(args, "-c", "log_min_messages=warning")
+	}
+
 	instance := &pgProcess{
 		log:    log,
 		data:   data,
 		port:   port,
 		lock:   lock,
 		config: config,
-		cmd: exec.Command(config.Binary,
-			"-F",
-			"-D", data+"/pgdata",
-			"-p", strconv.Itoa(port),
-			"-c", "listen_addresses=",
-			"-c", "autovacuum=off",
-			"-c", "unix_socket_directories="+data),
+		cmd:    exec.Command(config.Binary, args...),
 	}
 
-	instance.cmd.Stderr = logWriter(log, "postgres")
+	if isVerbose() {
+		instance.cmd.Stderr = logWriter(log, "postgres")
+	}
 	modifyProcessOnSystem(instance.cmd)
 
 	log.Logf("Starting new postgres instance on port %d", port)

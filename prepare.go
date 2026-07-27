@@ -1,7 +1,6 @@
 package pgtest
 
 import (
-	"archive/zip"
 	"fmt"
 	"io"
 	"net/http"
@@ -58,15 +57,9 @@ func doInstallVersion(t testing.TB, version string) (Config, error) {
 	useNix := hasNixShell()
 	if useNix {
 		install = installViaNixStore
-		fallbackInstall = installPostgresViaMaven
+		fallbackInstall = installPostgresFromGitHub
 	} else {
-		install = installPostgresViaMaven
-	}
-
-	if os.Getenv("PGTEST_FORCE_MAVEN") == "true" {
-		t.Logf("forcing maven installation for postgres version %q", version)
-		install = installPostgresViaMaven
-		fallbackInstall = nil
+		install = installPostgresFromGitHub
 	}
 
 	// install postgres
@@ -128,7 +121,7 @@ func doInstallVersion(t testing.TB, version string) (Config, error) {
 	return config, nil
 }
 
-func installPostgresViaMaven(log logger, version string) (string, error) {
+func installPostgresFromGitHub(log logger, version string) (string, error) {
 	system, err := deriveSystem(runtime.GOOS)
 	if err != nil {
 		return "", err
@@ -139,6 +132,8 @@ func installPostgresViaMaven(log logger, version string) (string, error) {
 		return "", err
 	}
 
+	url := postgresDownloadURL(version, system, arch, linuxDistro())
+
 	path := filepath.Join(Root, version)
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		return "", fmt.Errorf("creating working directory: %w", err)
@@ -146,24 +141,44 @@ func installPostgresViaMaven(log logger, version string) (string, error) {
 
 	if err := download(log,
 		filepath.Join(path, "download"),
-		"https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-"+system+"-"+arch+"/"+version+"/embedded-postgres-binaries-"+system+"-"+arch+"-"+version+".jar",
-		"postgres.jar"); err != nil {
+		url,
+		"postgres.tar.gz"); err != nil {
 		return "", fmt.Errorf("download postgres: %w", err)
-	}
-
-	if err := extractTarGzFromJar(
-		filepath.Join(path, "download", "postgres.jar"),
-		filepath.Join(path, "unjar", "postgres.tar.xz")); err != nil {
-		return "", fmt.Errorf("extract tar from jar: %w", err)
 	}
 
 	if err := execute(
 		filepath.Join(path, "unpacked"),
-		"tar", "xf", "../unjar/postgres.tar.xz"); err != nil {
+		"tar", "xzf", "../download/postgres.tar.gz"); err != nil {
 		return "", fmt.Errorf("unpack postgres: %w", err)
 	}
 
 	return filepath.Join(path, "unpacked"), nil
+}
+
+func postgresDownloadURL(version, system, arch, distro string) string {
+	// derive the release version tag: if version has two parts (e.g. "18.4"), append ".0"
+	releaseVersion := version
+	if strings.Count(version, ".") == 1 {
+		releaseVersion = version + ".0"
+	}
+
+	var assetName string
+	if system == "linux" {
+		assetName = "postgres-linux-" + distro + "-" + arch + ".tar.gz"
+	} else {
+		assetName = "postgres-" + system + "-" + arch + ".tar.gz"
+	}
+
+	return "https://github.com/flachnetz/embedded-postgres-binaries/releases/download/v" + releaseVersion + "/" + assetName
+}
+
+// linuxDistro detects whether we're on alpine or debian-based linux.
+func linuxDistro() string {
+	data, err := os.ReadFile("/etc/os-release")
+	if err == nil && strings.Contains(string(data), "alpine") {
+		return "alpine"
+	}
+	return "debian"
 }
 
 func hasNixShell() bool {
@@ -195,7 +210,7 @@ func deriveArchitecture(arch string) (string, error) {
 		return "amd64", nil
 
 	case "arm64":
-		return "arm64v8", nil
+		return "arm64", nil
 
 	default:
 		return "", fmt.Errorf("unsupported arch: %q", arch)
@@ -287,56 +302,4 @@ func download(log logger, directory, url, name string) error {
 
 		return nil
 	})
-}
-
-func extractTarGzFromJar(jar, tar string) error {
-	target := filepath.Dir(tar)
-
-	return atomicOperation(target, func(tempTarget string) error {
-		fmt.Println("Extract file from jar:", jar)
-
-		jar, err := zip.OpenReader(jar)
-		if err != nil {
-			return fmt.Errorf("open postgres.jar file: %w", err)
-		}
-
-		defer jar.Close()
-
-		for _, file := range jar.File {
-			// just pick the biggest file
-			if file.UncompressedSize64 > 4*1024*1024 {
-				r, err := file.Open()
-				if err != nil {
-					return fmt.Errorf("unpack jar entry: %w", err)
-				}
-
-				//goland:noinspection ALL
-				defer r.Close()
-
-				if err := writeTo(filepath.Join(tempTarget, filepath.Base(tar)), r); err != nil {
-					return fmt.Errorf("unpack jar entry: %w", err)
-				}
-
-				return nil
-			}
-		}
-
-		return nil
-	})
-}
-
-func writeTo(target string, reader io.Reader) error {
-	fp, err := os.Create(target)
-	if err != nil {
-		return fmt.Errorf("open file at %s: %w", target, err)
-	}
-
-	defer fp.Close()
-
-	_, err = io.Copy(fp, reader)
-	if err != nil {
-		return fmt.Errorf("copy to file %s: %w", target, err)
-	}
-
-	return nil
 }

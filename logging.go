@@ -11,6 +11,11 @@ type logger interface {
 	Logf(fmt string, args ...any)
 }
 
+type nopLogger struct{}
+
+func (nopLogger) Log(...any)          {}
+func (nopLogger) Logf(string, ...any) {}
+
 func logWriter(l logger, prefix string) io.Writer {
 	reader, writer := io.Pipe()
 
@@ -30,6 +35,9 @@ func writerScanner(l logger, reader *io.PipeReader, prefix string) {
 			l.Log(prefix, " ", scanner.Text())
 		}
 	}
+
+	// ignore errors
+	_ = scanner.Err()
 }
 
 func closeWriter(writer *io.PipeWriter) {

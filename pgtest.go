@@ -11,7 +11,7 @@ import (
 
 var (
 	Root    = os.ExpandEnv("${HOME}/.pgtest")
-	Version = "18.3.0"
+	Version = "18.4.0"
 )
 
 type SetupFunc func(db *sql.DB) error
@@ -80,6 +80,9 @@ var procsMu sync.Mutex
 var procs = map[Config]*pgProcess{}
 
 func newInstance(ctx context.Context, log logger, config Config) (*pgInstance, error) {
+	if !isVerbose() {
+		log = nopLogger{}
+	}
 	procsMu.Lock()
 	defer procsMu.Unlock()
 
